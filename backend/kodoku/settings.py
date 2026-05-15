@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://kodoku:kodoku@localhost:5432/kodoku"
     app_env: str = "development"
     log_level: str = "INFO"
+    # NoDecode prevents pydantic-settings from JSON-parsing the raw env string before
+    # our validator runs — without it, "a,b" would raise a JSONDecodeError.
     allowed_origins: Annotated[list[str], NoDecode, Field(default=["http://localhost:3000"])]
 
     @field_validator("allowed_origins", mode="before")
