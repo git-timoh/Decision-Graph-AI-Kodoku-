@@ -54,17 +54,17 @@ class Session(Base):
         onupdate=func.now(),
     )
 
-    nodes: Mapped[list["Node"]] = relationship(
+    nodes: Mapped[list[Node]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    checkpoints: Mapped[list["Checkpoint"]] = relationship(
+    checkpoints: Mapped[list[Checkpoint]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    events: Mapped[list["Event"]] = relationship(
+    events: Mapped[list[Event]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -96,8 +96,8 @@ class Node(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    session: Mapped["Session"] = relationship(back_populates="nodes")
-    evaluations: Mapped[list["Evaluation"]] = relationship(
+    session: Mapped[Session] = relationship(back_populates="nodes")
+    evaluations: Mapped[list[Evaluation]] = relationship(
         back_populates="node",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -127,7 +127,7 @@ class Evaluation(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    node: Mapped["Node"] = relationship(back_populates="evaluations")
+    node: Mapped[Node] = relationship(back_populates="evaluations")
 
     __table_args__ = (Index("ix_evaluations_node_id", "node_id"),)
 
@@ -153,7 +153,7 @@ class Checkpoint(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    session: Mapped["Session"] = relationship(back_populates="checkpoints")
+    session: Mapped[Session] = relationship(back_populates="checkpoints")
 
     __table_args__ = (
         Index("ix_checkpoints_session_id_resolved_at", "session_id", "resolved_at"),
@@ -175,6 +175,6 @@ class Event(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    session: Mapped["Session"] = relationship(back_populates="events")
+    session: Mapped[Session] = relationship(back_populates="events")
 
     __table_args__ = (Index("ix_events_session_id_id", "session_id", "id"),)
