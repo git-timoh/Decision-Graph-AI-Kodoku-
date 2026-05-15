@@ -3,7 +3,7 @@
 > Tree-of-thoughts planner that turns a goal into a graph of explored, evaluated,
 > and synthesized ideas — with human-in-the-loop checkpoints at every step.
 
-**Status:** M1 (skeleton) complete. See `docs/superpowers/specs/2026-05-14-kodoku-mvp-design.md`
+**Status:** M2 (domain model + REST CRUD) complete. See `docs/superpowers/specs/2026-05-14-kodoku-mvp-design.md`
 for the full design spec and `docs/architecture.md` for milestone status.
 
 ## Stack
