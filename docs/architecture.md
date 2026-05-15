@@ -8,7 +8,7 @@ and operational notes.
 ## Status
 
 - M1 — Skeleton + contracts: ✅ complete
-- M2 — Domain model + REST CRUD: not started
+- M2 — Domain model + REST CRUD: ✅ complete
 - M3 — React Flow graph + WebSocket plumbing: not started
 - M4 — DecisionEngine + LLM abstraction: not started
 - M5 — Human-in-the-loop checkpoints: not started
