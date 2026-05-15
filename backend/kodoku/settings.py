@@ -1,0 +1,35 @@
+"""Application settings loaded from environment variables."""
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Annotated
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings.sources import NoDecode
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    database_url: str = "postgresql+asyncpg://kodoku:kodoku@localhost:5432/kodoku"
+    app_env: str = "development"
+    log_level: str = "INFO"
+    allowed_origins: Annotated[list[str], NoDecode, Field(default=["http://localhost:3000"])]
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def _split_origins(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [o.strip() for o in value.split(",") if o.strip()]
+        return value
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()
