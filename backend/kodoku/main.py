@@ -6,6 +6,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from kodoku import __version__
 from kodoku.api.health import router as health_router
 from kodoku.settings import Settings, get_settings
 
@@ -20,7 +21,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Kodoku",
-        version="0.1.0",
+        version=__version__,
         description="Decision Graph AI — Tree of Thoughts planner",
     )
 
