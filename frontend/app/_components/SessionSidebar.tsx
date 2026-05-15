@@ -58,13 +58,13 @@ export function SessionSidebar({ activeSessionId }: Props) {
           <p className="px-2 text-sm text-muted-foreground">Loading…</p>
         ) : error ? (
           <p className="px-2 text-sm text-destructive">Backend unreachable: {error}</p>
-        ) : sessions.length === 0 ? (
+        ) : (sessions ?? []).length === 0 ? (
           <p className="px-2 text-sm text-muted-foreground">
             No sessions yet. Click &quot;New session&quot; to start.
           </p>
         ) : (
           <ul className="space-y-0.5">
-            {sessions.map((row) => (
+            {(sessions ?? []).map((row) => (
               <li key={row.id}>
                 <Link
                   href={`/s/${row.id}`}
