@@ -1,4 +1,12 @@
-import type { HealthResponse } from "@/lib/types/api";
+import type {
+  HealthResponse,
+  SessionCreate,
+  SessionCreateResponse,
+  SessionDetailResponse,
+  SessionListItem,
+  SessionResponse,
+  SessionUpdate,
+} from "@/lib/types/api";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -14,12 +22,15 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+type RequestOptions = RequestInit & { expectEmpty?: boolean };
+
+async function request<T>(path: string, init?: RequestOptions): Promise<T> {
+  const { expectEmpty, ...rest } = init ?? {};
   const response = await fetch(`${BASE_URL}${path}`, {
-    ...init,
+    ...rest,
     headers: {
       "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
+      ...(rest.headers ?? {}),
     },
     cache: "no-store",
   });
@@ -35,9 +46,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
 
-  return body as T;
+  return (expectEmpty ? undefined : body) as T;
 }
 
 export const api = {
   healthz: () => request<HealthResponse>("/healthz"),
+
+  listSessions: () => request<SessionListItem[]>("/sessions"),
+
+  getSession: (id: string) =>
+    request<SessionDetailResponse>(`/sessions/${id}`),
+
+  createSession: (body: SessionCreate) =>
+    request<SessionCreateResponse>("/sessions", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  patchSession: (id: string, body: SessionUpdate) =>
+    request<SessionResponse>(`/sessions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deleteSession: (id: string) =>
+    request<void>(`/sessions/${id}`, {
+      method: "DELETE",
+      expectEmpty: true,
+    }),
 };
