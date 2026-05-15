@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from decimal import Decimal
 
 import pytest
@@ -12,6 +11,8 @@ from kodoku.db.models import (
     Evaluation,
     Event,
     Node,
+)
+from kodoku.db.models import (
     Session as SessionModel,
 )
 from kodoku.domain.enums import (
@@ -28,12 +29,21 @@ async def test_session_round_trip(db_session: AsyncSession) -> None:
         title="Side projects in AI + music",
         goal="Brainstorm side projects combining AI and music",
         status=SessionStatus.DRAFT.value,
-        config={"model": "anthropic/claude-sonnet-4-6", "branching_factor": 3, "max_depth": 3, "temperature": 0.7},
+        config={
+            "model": "anthropic/claude-sonnet-4-6",
+            "branching_factor": 3,
+            "max_depth": 3,
+            "temperature": 0.7,
+        },
     )
     db_session.add(s)
     await db_session.flush()
 
-    fetched = (await db_session.execute(select(SessionModel).where(SessionModel.id == s.id))).scalar_one()
+    fetched = (
+        await db_session.execute(
+            select(SessionModel).where(SessionModel.id == s.id)
+        )
+    ).scalar_one()
     assert fetched.user_id == "local"
     assert fetched.title == "Side projects in AI + music"
     assert fetched.status == "draft"

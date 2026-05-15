@@ -17,9 +17,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from kodoku.db.base import Base
 from kodoku.db import models  # noqa: F401  — register mappers
-
+from kodoku.db.base import Base
 
 TEST_DB_NAME = "kodoku_test"
 
