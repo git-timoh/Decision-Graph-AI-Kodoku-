@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # NoDecode prevents pydantic-settings from JSON-parsing the raw env string before
     # our validator runs — without it, "a,b" would raise a JSONDecodeError.
-    allowed_origins: Annotated[list[str], NoDecode, Field(default=["http://localhost:3000"])]
+    allowed_origins: Annotated[list[str], NoDecode] = Field(default=["http://localhost:3000"])
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
