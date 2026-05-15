@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from kodoku import __version__
 from kodoku.api.health import router as health_router
+from kodoku.api.sessions import router as sessions_router
 from kodoku.settings import Settings, get_settings
 
 
@@ -34,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.include_router(health_router)
+    app.include_router(sessions_router)
 
     return app
 
