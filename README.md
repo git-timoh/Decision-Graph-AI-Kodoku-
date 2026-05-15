@@ -55,6 +55,22 @@ cd backend && pytest
 cd frontend && npm run typecheck && npm run lint
 ```
 
+## Regenerating frontend types
+
+`frontend/lib/types/contracts.ts` is generated from the backend's OpenAPI
+schema. After any change to a Pydantic DTO:
+
+```bash
+# Terminal A
+cd backend && uvicorn kodoku.main:app --port 8000
+
+# Terminal B
+cd frontend && npm run gen:contracts
+git add lib/types/contracts.ts && git commit -m "chore: regenerate frontend contracts"
+```
+
+CI will enforce this in M6.
+
 ## Repo layout
 
 ```
