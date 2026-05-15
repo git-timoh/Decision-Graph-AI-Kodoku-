@@ -10,6 +10,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from kodoku.db.base import Base
+from kodoku.db import models  # noqa: F401  — register mappers for autogenerate
 from kodoku.settings import get_settings
 
 config = context.config
