@@ -9,7 +9,7 @@ and operational notes.
 
 - M1 — Skeleton + contracts: ✅ complete
 - M2 — Domain model + REST CRUD: ✅ complete
-- M3 — React Flow graph + WebSocket plumbing: not started
+- M3 — React Flow graph + WebSocket plumbing: ✅ complete
 - M4 — DecisionEngine + LLM abstraction: not started
 - M5 — Human-in-the-loop checkpoints: not started
 - M6 — Provider polish + export + deploy: not started

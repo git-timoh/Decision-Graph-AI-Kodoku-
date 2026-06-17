@@ -61,6 +61,43 @@ export interface paths {
         patch: operations["update_session_sessions__session_id__patch"];
         trace?: never;
     };
+    "/sessions/{session_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Replay Events */
+        get: operations["replay_events_sessions__session_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/debug/emit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Debug Emit
+         * @description Emit a scripted storyline to drive frontend development.
+         */
+        post: operations["debug_emit_sessions__session_id__debug_emit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -95,6 +132,13 @@ export interface components {
          * @enum {string}
          */
         CheckpointKind: "post_expand" | "post_evaluate" | "pre_synthesis";
+        /** DebugEmitResponse */
+        DebugEmitResponse: {
+            /** Emitted */
+            emitted: number;
+            /** Last Event Id */
+            last_event_id: number;
+        };
         /** EvaluationDTO */
         EvaluationDTO: {
             /**
@@ -321,6 +365,28 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * WsEvent
+         * @description A single server-push message; mirrors a row in the `events` journal.
+         */
+        WsEvent: {
+            /** Id */
+            id: number;
+            /** Type */
+            type: string;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+            /** Payload */
+            payload: Record<string, never>;
+        };
     };
     responses: never;
     parameters: never;
@@ -485,6 +551,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replay_events_sessions__session_id__events_get: {
+        parameters: {
+            query?: {
+                since?: number;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WsEvent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    debug_emit_sessions__session_id__debug_emit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebugEmitResponse"];
                 };
             };
             /** @description Validation Error */
