@@ -20,11 +20,13 @@ export type GraphNode = {
 };
 
 export type EngineStatus =
+  | "draft"
   | "idle"
   | "running"
   | "awaiting_human"
   | "done"
-  | "error";
+  | "error"
+  | "paused";
 
 export type Checkpoint = {
   checkpoint_id: string;

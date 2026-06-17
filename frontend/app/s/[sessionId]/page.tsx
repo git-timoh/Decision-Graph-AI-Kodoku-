@@ -33,6 +33,8 @@ export default async function SessionPage({ params }: Props) {
         <section className="flex-1 overflow-hidden">
           <SessionGraphView
             sessionId={session.id}
+            initialStatus={session.status}
+            initialSynthesis={session.final_synthesis}
             initialNodes={session.nodes}
             initialEvaluations={session.evaluations}
           />

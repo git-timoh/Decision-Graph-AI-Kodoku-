@@ -9,11 +9,12 @@ from collections.abc import Callable
 from typing import Any
 
 from kodoku.llm.base import LLMClient
-from kodoku.llm.litellm_client import LiteLLMClient
 
 
 def make_llm_client(config: dict[str, Any]) -> LLMClient:
     """Build a `LiteLLMClient` from a session's `config` dict."""
+    from kodoku.llm.litellm_client import LiteLLMClient
+
     return LiteLLMClient(model=config["model"], temperature=config.get("temperature", 0.7))
 
 

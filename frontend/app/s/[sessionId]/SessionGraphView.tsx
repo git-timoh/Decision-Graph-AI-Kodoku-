@@ -6,7 +6,7 @@ import { Graph } from "@/components/graph/Graph";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 import { connectSession } from "@/lib/ws/client";
-import type { GraphNode } from "@/lib/ws/types";
+import type { EngineStatus, GraphNode } from "@/lib/ws/types";
 import type { EvaluationDTO, NodeDTO } from "@/lib/types/api";
 import { useSessionStore } from "@/state/sessionStore";
 
@@ -14,11 +14,13 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 const STATUS_STYLE: Record<string, string> = {
+  draft: "bg-muted text-muted-foreground",
   idle: "bg-muted text-muted-foreground",
   running: "bg-blue-500/15 text-blue-600",
   awaiting_human: "bg-amber-500/15 text-amber-600",
   done: "bg-emerald-500/15 text-emerald-600",
   error: "bg-red-500/15 text-red-600",
+  paused: "bg-amber-500/15 text-amber-600",
 };
 
 function seedNodes(nodes: NodeDTO[], evaluations: EvaluationDTO[]): GraphNode[] {
@@ -41,12 +43,16 @@ function seedNodes(nodes: NodeDTO[], evaluations: EvaluationDTO[]): GraphNode[] 
 
 type Props = {
   sessionId: string;
+  initialStatus: EngineStatus;
+  initialSynthesis: string | null;
   initialNodes: NodeDTO[];
   initialEvaluations: EvaluationDTO[];
 };
 
 export function SessionGraphView({
   sessionId,
+  initialStatus,
+  initialSynthesis,
   initialNodes,
   initialEvaluations,
 }: Props) {
@@ -59,16 +65,29 @@ export function SessionGraphView({
   const [emitting, setEmitting] = useState(false);
   const [running, setRunning] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
+  const canRun = status === "draft" || status === "paused" || status === "error";
 
   useEffect(() => {
-    seedGraph(seedNodes(initialNodes, initialEvaluations));
+    seedGraph(seedNodes(initialNodes, initialEvaluations), {
+      status: initialStatus,
+      synthesis: initialSynthesis ?? "",
+    });
     const disconnect = connectSession(sessionId, {
       apply: applyEvent,
       getSince: () => useSessionStore.getState().graph.lastSeenEventId,
       onConnected: setConnected,
     });
     return disconnect;
-  }, [sessionId, initialNodes, initialEvaluations, seedGraph, applyEvent, setConnected]);
+  }, [
+    sessionId,
+    initialStatus,
+    initialSynthesis,
+    initialNodes,
+    initialEvaluations,
+    seedGraph,
+    applyEvent,
+    setConnected,
+  ]);
 
   async function emitDebug() {
     setEmitting(true);
@@ -129,7 +148,7 @@ export function SessionGraphView({
           <Button
             size="sm"
             onClick={runSession}
-            disabled={status === "running" || running}
+            disabled={!canRun || running}
           >
             {running ? "Starting…" : "Run"}
           </Button>

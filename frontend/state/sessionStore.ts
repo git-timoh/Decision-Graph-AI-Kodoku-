@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { reduce } from "@/lib/ws/reducer";
 import {
   emptyGraph,
+  type EngineStatus,
   type GraphNode,
   type GraphState,
   type WsEvent,
@@ -18,7 +19,10 @@ type SessionStore = {
   /** Live graph for the session currently open at /s/[id]. */
   graph: GraphState;
   connected: boolean;
-  seedGraph: (nodes: GraphNode[]) => void;
+  seedGraph: (
+    nodes: GraphNode[],
+    initial?: { status?: EngineStatus; synthesis?: string },
+  ) => void;
   applyEvent: (event: WsEvent) => void;
   setConnected: (connected: boolean) => void;
 };
@@ -30,10 +34,11 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
   graph: emptyGraph(),
   connected: false,
-  seedGraph: (nodes) =>
+  seedGraph: (nodes, initial) =>
     set(() => ({
       graph: {
         ...emptyGraph(),
+        ...initial,
         nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
       },
     })),
