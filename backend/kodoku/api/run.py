@@ -78,6 +78,9 @@ async def start_run(
             status_code=409, detail=f"cannot start session in status {session.status!r}"
         )
 
+    if runner.is_running(session_id):
+        raise HTTPException(status_code=409, detail="session is already running")
+
     runner.start(session_id, _run_engine(session_id, make_client))
     return RunResponse(status="running")
 

@@ -9,9 +9,12 @@ tasks and a stop-set.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Coroutine
 from typing import Any
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 
 class SessionRunner:
@@ -24,9 +27,13 @@ class SessionRunner:
         task = asyncio.create_task(coro)
         self._tasks[session_id] = task
 
-        def _cleanup(_: asyncio.Task[Any]) -> None:
+        def _cleanup(task: asyncio.Task[Any]) -> None:
             self._tasks.pop(session_id, None)
             self._stop.discard(session_id)
+            if not task.cancelled() and (exc := task.exception()) is not None:
+                logger.exception(
+                    "engine run failed for session %s", session_id, exc_info=exc
+                )
 
         task.add_done_callback(_cleanup)
 

@@ -7,6 +7,7 @@ running on a fresh AsyncSession -> single commit -> REST read-back. The
 """
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 from uuid import UUID, uuid4
@@ -127,6 +128,29 @@ async def test_run_on_running_session_returns_409(
 
     response = await client.post(f"/sessions/{sid}/run")
     assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_run_while_in_process_task_running_returns_409(client: AsyncClient) -> None:
+    """A second `/run` while the first task is still tracked in-process must
+    be rejected even though the DB status hasn't been committed as
+    'running' yet (the engine only commits at the end of the run)."""
+    sid = await _make_session(client)
+    session_id = UUID(sid)
+    release = asyncio.Event()
+
+    async def _never_finishes() -> None:
+        await release.wait()
+
+    runner.start(session_id, _never_finishes())
+    try:
+        assert runner.is_running(session_id) is True
+
+        response = await client.post(f"/sessions/{sid}/run")
+        assert response.status_code == 409
+    finally:
+        release.set()
+        await runner.join(session_id)
 
 
 @pytest.mark.asyncio
