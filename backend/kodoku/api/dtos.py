@@ -118,3 +118,18 @@ class SessionDetailResponse(SessionResponse):
 
 class SessionCreateResponse(BaseModel):
     session_id: UUID
+
+
+class WsEvent(BaseModel):
+    """A single server-push message; mirrors a row in the `events` journal."""
+
+    id: int
+    type: str
+    session_id: UUID
+    ts: datetime
+    payload: dict[str, Any]
+
+
+class DebugEmitResponse(BaseModel):
+    emitted: int
+    last_event_id: int
