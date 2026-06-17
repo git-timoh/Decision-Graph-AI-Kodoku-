@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Graph } from "@/components/graph/Graph";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api/client";
 import { connectSession } from "@/lib/ws/client";
 import type { GraphNode } from "@/lib/ws/types";
 import type { EvaluationDTO, NodeDTO } from "@/lib/types/api";
@@ -56,6 +57,8 @@ export function SessionGraphView({
   const synthesis = useSessionStore((s) => s.graph.synthesis);
   const connected = useSessionStore((s) => s.connected);
   const [emitting, setEmitting] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [interrupting, setInterrupting] = useState(false);
 
   useEffect(() => {
     seedGraph(seedNodes(initialNodes, initialEvaluations));
@@ -78,6 +81,24 @@ export function SessionGraphView({
     }
   }
 
+  async function runSession() {
+    setRunning(true);
+    try {
+      await api.runSession(sessionId);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function interruptSession() {
+    setInterrupting(true);
+    try {
+      await api.interruptSession(sessionId);
+    } finally {
+      setInterrupting(false);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b border-border px-6 py-3">
@@ -91,9 +112,26 @@ export function SessionGraphView({
         <span className="text-xs text-muted-foreground">
           {connected ? "● live" : "○ disconnected"}
         </span>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={emitDebug} disabled={emitting}>
             {emitting ? "Emitting…" : "Emit debug events"}
+          </Button>
+          {status === "running" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={interruptSession}
+              disabled={interrupting}
+            >
+              {interrupting ? "Interrupting…" : "Interrupt"}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={runSession}
+            disabled={status === "running" || running}
+          >
+            {running ? "Starting…" : "Run"}
           </Button>
         </div>
       </div>

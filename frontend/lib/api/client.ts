@@ -74,4 +74,14 @@ export const api = {
       method: "DELETE",
       expectEmpty: true,
     }),
+
+  runSession: (id: string) =>
+    request<void>(`/sessions/${id}/run`, {
+      method: "POST",
+    }),
+
+  interruptSession: (id: string) =>
+    request<void>(`/sessions/${id}/interrupt`, {
+      method: "POST",
+    }),
 };
