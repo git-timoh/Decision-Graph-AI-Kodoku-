@@ -204,8 +204,10 @@ async def test_runner_start_tracks_and_interrupt_returns_true() -> None:
 async def test_run_with_braces_in_goal_completes(db_session: AsyncSession) -> None:
     """A goal containing `{`/`}` must not be parsed as a format string.
 
-    The old `str.format(...)` templating raised `KeyError`/`IndexError`/
-    `ValueError` on `Compare {A, B} vs {C}`; brace-safe substitution completes.
+    `str.format` does not re-parse substituted values, so a brace-bearing goal
+    alone never crashed; the real fragility was the templates' own literal JSON
+    braces needing `{{ }}` escaping. `string.Template.safe_substitute` removes
+    that footgun. This guards that `Compare {A, B} vs {C}` runs to completion.
     """
     repo = SessionRepository(db_session)
     payload = SessionCreate(
@@ -270,39 +272,26 @@ async def test_parallel_evaluate_preserves_child_order(db_session: AsyncSession)
 
     await engine.run()
 
-    # 3 candidate nodes, ordered by creation.
-    cand_nodes = (
-        (
-            await db_session.execute(
-                select(Node)
-                .where(Node.session_id == session.id, Node.kind == NodeKind.CANDIDATE.value)
-                .order_by(Node.created_at.asc())
-            )
-        )
-        .scalars()
-        .all()
-    )
-    assert [n.title for n in cand_nodes] == ["C1", "C2", "C3"]
+    # Child order is the node.created emission order (sequential, in child
+    # order) — NOT created_at, which ties under Postgres func.now() (one
+    # timestamp per transaction) and would order siblings non-deterministically.
+    created = [
+        p for t, p in rec.events
+        if t == NODE_CREATED and p["kind"] == NodeKind.CANDIDATE.value
+    ]
+    child_ids = [p["id"] for p in created]
+    assert [p["title"] for p in created] == ["C1", "C2", "C3"]
 
-    # 3 Evaluation rows persisted in child order (scores 1, 2, 3).
-    evals = (
-        (
-            await db_session.execute(
-                select(Evaluation)
-                .join(Node, Evaluation.node_id == Node.id)
-                .order_by(Node.created_at.asc())
-            )
-        )
-        .scalars()
-        .all()
-    )
+    # 3 Evaluation rows persisted; scores associate to the right child (1, 2, 3)
+    # despite later children resolving first.
+    evals = (await db_session.execute(select(Evaluation))).scalars().all()
     assert len(evals) == 3
-    assert [float(e.score) for e in evals] == [1.0, 2.0, 3.0]
+    score_by_node = {str(e.node_id): float(e.score) for e in evals}
+    assert [score_by_node[cid] for cid in child_ids] == [1.0, 2.0, 3.0]
 
-    # evaluation.completed events emitted in child order despite reversed
-    # completion timing.
+    # evaluation.completed events emitted in child order despite reversed timing.
     ev_node_ids = [p["node_id"] for t, p in rec.events if t == EVALUATION_COMPLETED]
-    assert ev_node_ids == [str(n.id) for n in cand_nodes]
+    assert ev_node_ids == child_ids
 
 
 def test_emitter_alias_importable() -> None:
