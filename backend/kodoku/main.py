@@ -11,6 +11,7 @@ from kodoku.api.events import router as events_router
 from kodoku.api.health import router as health_router
 from kodoku.api.run import router as run_router
 from kodoku.api.sessions import router as sessions_router
+from kodoku.api.settings import router as settings_router
 from kodoku.settings import Settings, get_settings
 from kodoku.ws.router import router as ws_router
 
@@ -41,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sessions_router)
     app.include_router(events_router)
     app.include_router(run_router)
+    app.include_router(settings_router)
     app.include_router(ws_router)
 
     return app

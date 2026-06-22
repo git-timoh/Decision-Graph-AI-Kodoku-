@@ -12,7 +12,11 @@ class LLMClient(Protocol):
     `complete` returns the model's raw text; callers parse JSON themselves
     when `json_object=True`. `stream` is a *sync* method that returns an
     `AsyncIterator[str]`, so callers write `async for chunk in llm.stream(...)`.
+    `model` is the model string this client is bound to (e.g. recorded on
+    `Evaluation` rows).
     """
+
+    model: str
 
     async def complete(self, *, system: str, prompt: str, json_object: bool = False) -> str: ...
 

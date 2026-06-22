@@ -133,3 +133,73 @@ class WsEvent(BaseModel):
 class DebugEmitResponse(BaseModel):
     emitted: int
     last_event_id: int
+
+
+PROVIDER_NAMES: tuple[str, ...] = (
+    "openrouter",
+    "deepseek",
+    "openai",
+    "anthropic",
+    "zhipu",
+    "google",
+)
+
+MODEL_ROLES: tuple[str, ...] = ("expand", "evaluate", "synthesize")
+
+
+class ProviderStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    set: bool
+    hint: str | None = None
+
+
+class SettingsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    providers: dict[str, ProviderStatus]
+    ollama_base_url: str | None = None
+    models: dict[str, str | None]
+
+
+class SettingsTestResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    error: str | None = None
+
+
+class SettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    providers: dict[str, str | None] | None = None
+    ollama_base_url: str | None = None
+    models: dict[str, str] | None = None
+
+    @field_validator("providers")
+    @classmethod
+    def _validate_providers(
+        cls, value: dict[str, str | None] | None
+    ) -> dict[str, str | None] | None:
+        if value is None:
+            return value
+        unknown = sorted(set(value) - set(PROVIDER_NAMES))
+        if unknown:
+            raise ValueError(f"unknown provider name(s): {', '.join(unknown)}")
+        return value
+
+    @field_validator("models")
+    @classmethod
+    def _validate_models(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        if value is None:
+            return value
+        unknown = sorted(set(value) - set(MODEL_ROLES))
+        if unknown:
+            raise ValueError(f"unknown model role(s): {', '.join(unknown)}")
+        for role, model in value.items():
+            if " " in model or not _MODEL_RE.match(model):
+                raise ValueError(
+                    f"models.{role} must be a LiteLLM-style identifier "
+                    "(e.g. 'anthropic/claude-sonnet-4-6')"
+                )
+        return value

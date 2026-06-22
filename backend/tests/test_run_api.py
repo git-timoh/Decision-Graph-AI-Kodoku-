@@ -1,15 +1,15 @@
 """Integration tests for `POST /run` and `POST /interrupt`.
 
 These exercise the real commit boundary end-to-end: HTTP request -> engine
-running on a fresh AsyncSession -> single commit -> REST read-back. The
-`get_llm_factory` dependency is overridden so the engine talks to a
-`FakeLLMClient` scripted for a tiny one-node run instead of a real provider.
+running on a fresh AsyncSession -> single commit -> REST read-back. The run
+router's role-clients builder is overridden so the engine talks to a
+`RoleClients` of `FakeLLMClient`s scripted for a tiny one-node run instead of a
+real provider.
 """
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
-from typing import Any
+from collections.abc import AsyncIterator
 from uuid import UUID, uuid4
 
 import pytest
@@ -22,10 +22,10 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
+from kodoku.api.run import RoleClientsBuilder, get_role_clients_builder
 from kodoku.db.session import get_db
 from kodoku.engine.runner import runner
-from kodoku.llm.base import LLMClient
-from kodoku.llm.factory import get_llm_factory
+from kodoku.llm.factory import RoleClients
 from kodoku.llm.fake import FakeLLMClient
 from kodoku.main import create_app
 
@@ -65,15 +65,16 @@ async def client(
                 await session.rollback()
                 raise
 
-    def _override_llm_factory() -> Callable[[dict[str, Any]], LLMClient]:
-        def _make_client(_config: dict[str, Any]) -> LLMClient:
-            return _make_fake_client()
+    def _override_role_clients_builder() -> RoleClientsBuilder:
+        async def _build(_s: AsyncSession) -> RoleClients:
+            fake = _make_fake_client()
+            return RoleClients(expand=fake, evaluate=fake, synthesize=fake)
 
-        return _make_client
+        return _build
 
     app = create_app()
     app.dependency_overrides[get_db] = _override_db
-    app.dependency_overrides[get_llm_factory] = _override_llm_factory
+    app.dependency_overrides[get_role_clients_builder] = _override_role_clients_builder
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c

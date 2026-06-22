@@ -42,13 +42,21 @@ export function SessionSidebar({ activeSessionId }: Props) {
 
   return (
     <aside className="flex h-screen w-72 shrink-0 flex-col border-r border-border bg-card">
-      <div className="px-4 py-5">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
-          Kodoku
+      <div className="flex items-start justify-between px-4 py-5">
+        <div>
+          <Link href="/" className="text-lg font-semibold tracking-tight">
+            Kodoku
+          </Link>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Decision Graph AI
+          </p>
+        </div>
+        <Link
+          href="/settings"
+          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          Settings
         </Link>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Decision Graph AI
-        </p>
       </div>
       <div className="px-4 pb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Sessions

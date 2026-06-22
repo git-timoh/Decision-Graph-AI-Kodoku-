@@ -8,6 +8,7 @@ visible within the session (and to the recording emitter in tests).
 """
 from __future__ import annotations
 
+import asyncio
 from collections import deque
 from collections.abc import Callable
 from decimal import Decimal
@@ -33,10 +34,14 @@ from kodoku.engine.events import (
     Emitter,
 )
 from kodoku.engine.steps.decide import decide
-from kodoku.engine.steps.evaluate import evaluate
+from kodoku.engine.steps.evaluate import EvaluationResult, evaluate
 from kodoku.engine.steps.expand import expand
 from kodoku.engine.steps.synthesize import synthesize
-from kodoku.llm.base import LLMClient
+from kodoku.llm.factory import RoleClients
+
+#: Max concurrent `evaluate` LLM calls per parent.
+# ponytail: hardcoded module constant — make configurable later.
+EVAL_CONCURRENCY = 4
 
 
 class DecisionEngine:
@@ -44,14 +49,14 @@ class DecisionEngine:
         self,
         db: AsyncSession,
         session: SessionModel,
-        llm: LLMClient,
+        clients: RoleClients,
         emit: Emitter,
         *,
         should_stop: Callable[[], bool] = lambda: False,
     ) -> None:
         self.db = db
         self.session = session
-        self.llm = llm
+        self.clients = clients
         self.emit = emit
         self.should_stop = should_stop
         self.config = SessionConfig(**session.config)
@@ -104,7 +109,7 @@ class DecisionEngine:
     async def _expand_one(self, parent_id: UUID) -> None:
         parent = await self._node(parent_id)
         cands = await expand(
-            self.llm,
+            self.clients.expand,
             goal=self.session.goal,
             parent_title=parent.title,
             parent_content=parent.content,
@@ -147,20 +152,29 @@ class DecisionEngine:
                 },
             )
 
+        # Evaluate children concurrently (bounded), but persist the rows and
+        # emit events sequentially in child order below.
+        sem = asyncio.Semaphore(EVAL_CONCURRENCY)
+
+        async def _eval_child(child: Node) -> EvaluationResult:
+            async with sem:
+                return await evaluate(
+                    self.clients.evaluate,
+                    goal=self.session.goal,
+                    candidate_title=child.title,
+                    candidate_content=child.content,
+                )
+
+        results = await asyncio.gather(*(_eval_child(child) for child in children))
+
         scored: list[tuple[UUID, float]] = []
-        for child in children:
-            ev = await evaluate(
-                self.llm,
-                goal=self.session.goal,
-                candidate_title=child.title,
-                candidate_content=child.content,
-            )
+        for child, ev in zip(children, results, strict=True):
             evaluation = Evaluation(
                 node_id=child.id,
                 score=Decimal(str(ev.score)),
                 critique=ev.critique,
                 dimensions=ev.dimensions,
-                model=self.config.model,
+                model=self.clients.evaluate.model,
             )
             self.db.add(evaluation)
             await self.db.flush()
@@ -196,7 +210,7 @@ class DecisionEngine:
         kept = [(n.title, n.content) for n in kept_nodes]
 
         text = ""
-        async for delta in synthesize(self.llm, goal=self.session.goal, kept=kept):
+        async for delta in synthesize(self.clients.synthesize, goal=self.session.goal, kept=kept):
             text += delta
             await self.emit(SYNTHESIS_STREAMING, {"delta": delta})
 

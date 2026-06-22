@@ -24,8 +24,14 @@ from kodoku.engine.events import (
 )
 from kodoku.engine.runner import SessionRunner
 from kodoku.engine.state_machine import DecisionEngine
+from kodoku.llm.factory import RoleClients
 from kodoku.llm.fake import FakeLLMClient
 from kodoku.repo.sessions import SessionRepository
+
+
+def _roles(llm: FakeLLMClient) -> RoleClients:
+    """Use one scripted fake for all three roles (calls are FIFO-shared)."""
+    return RoleClients(expand=llm, evaluate=llm, synthesize=llm)
 
 
 class _Recorder:
@@ -83,7 +89,7 @@ async def test_full_run_persists_and_completes(db_session: AsyncSession) -> None
         chunks=["Final ", "answer."],
     )
     rec = _Recorder()
-    engine = DecisionEngine(db_session, session, llm, rec)
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
 
     await engine.run()
 
@@ -105,7 +111,7 @@ async def test_full_run_persists_and_completes(db_session: AsyncSession) -> None
         (await db_session.execute(select(Evaluation))).scalars().all()
     )
     assert len(evals) == 4
-    assert all(e.model == session.config["model"] for e in evals)
+    assert all(e.model == llm.model for e in evals)
 
     # Event sequence bookends + counts.
     assert rec.types()[0] == SESSION_STARTED
@@ -121,7 +127,7 @@ async def test_pruning_reflected_in_node_statuses(db_session: AsyncSession) -> N
         completions=[json.dumps(o) for o in _FULL_RUN_SCRIPT],
         chunks=["done"],
     )
-    engine = DecisionEngine(db_session, session, llm, _Recorder())
+    engine = DecisionEngine(db_session, session, _roles(llm), _Recorder())
 
     await engine.run()
 
@@ -141,7 +147,7 @@ async def test_error_path_sets_status_and_emits(db_session: AsyncSession) -> Non
     session = await _make_session(db_session)
     llm = FakeLLMClient(completions=[])  # first expand raises (exhausted)
     rec = _Recorder()
-    engine = DecisionEngine(db_session, session, llm, rec)
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
 
     with pytest.raises(AssertionError):
         await engine.run()
@@ -155,7 +161,7 @@ async def test_should_stop_from_start_pauses(db_session: AsyncSession) -> None:
     session = await _make_session(db_session)
     llm = FakeLLMClient(completions=[], chunks=["x"])
     rec = _Recorder()
-    engine = DecisionEngine(db_session, session, llm, rec, should_stop=lambda: True)
+    engine = DecisionEngine(db_session, session, _roles(llm), rec, should_stop=lambda: True)
 
     await engine.run()
 
@@ -193,6 +199,99 @@ async def test_runner_start_tracks_and_interrupt_returns_true() -> None:
     assert runner.is_running(sid) is False
     # Cleanup callback also cleared the stop flag.
     assert runner.should_stop(sid) is False
+
+
+async def test_run_with_braces_in_goal_completes(db_session: AsyncSession) -> None:
+    """A goal containing `{`/`}` must not be parsed as a format string.
+
+    `str.format` does not re-parse substituted values, so a brace-bearing goal
+    alone never crashed; the real fragility was the templates' own literal JSON
+    braces needing `{{ }}` escaping. `string.Template.safe_substitute` removes
+    that footgun. This guards that `Compare {A, B} vs {C}` runs to completion.
+    """
+    repo = SessionRepository(db_session)
+    payload = SessionCreate(
+        goal="Compare {A, B} vs {C}",
+        config=SessionConfig(branching_factor=2, max_depth=2),
+    )
+    session = await repo.create(payload)
+    llm = FakeLLMClient(
+        completions=[json.dumps(o) for o in _FULL_RUN_SCRIPT],
+        chunks=["Final ", "answer."],
+    )
+    engine = DecisionEngine(db_session, session, _roles(llm), _Recorder())
+
+    await engine.run()  # must not raise
+
+    assert session.status == "done"
+    assert session.final_synthesis == "Final answer."
+
+
+class _ScoreByTitleClient:
+    """Fake `LLMClient` whose evaluate score is derived from the candidate title.
+
+    Out-of-order completion is forced (later children resolve first) to prove
+    the engine persists evaluations/events in *child order*, not completion
+    order.
+    """
+
+    model = "score-by-title"
+
+    def __init__(self, expand_obj: dict[str, Any], chunks: list[str]) -> None:
+        self._expand = json.dumps(expand_obj)
+        self.chunks = chunks
+        self._n = 0
+
+    async def complete(self, *, system: str, prompt: str, json_object: bool = False) -> str:
+        if '"candidates"' in prompt or "candidate next steps" in prompt:
+            return self._expand
+        # Evaluate: score by which title appears; reverse-delay so the last
+        # child's call resolves first.
+        order = ["C1", "C2", "C3"]
+        idx = next((i for i, t in enumerate(order) if t in prompt), 0)
+        await asyncio.sleep((len(order) - idx) * 0.01)
+        score = float(idx + 1)  # C1 -> 1.0, C2 -> 2.0, C3 -> 3.0
+        return json.dumps(
+            {"score": score, "critique": f"crit-{idx}", "dimensions": {"feasibility": score}}
+        )
+
+    async def stream(self, *, system: str, prompt: str) -> Any:
+        for chunk in self.chunks:
+            yield chunk
+
+
+async def test_parallel_evaluate_preserves_child_order(db_session: AsyncSession) -> None:
+    session = await _make_session(db_session, branching_factor=3, max_depth=1)
+    expand_obj = {"candidates": [{"title": t, "content": f"{t} content"} for t in
+                                 ("C1", "C2", "C3")]}
+    llm = _ScoreByTitleClient(expand_obj, chunks=["done"])
+    rec = _Recorder()
+    engine = DecisionEngine(
+        db_session, session, RoleClients(expand=llm, evaluate=llm, synthesize=llm), rec
+    )
+
+    await engine.run()
+
+    # Child order is the node.created emission order (sequential, in child
+    # order) — NOT created_at, which ties under Postgres func.now() (one
+    # timestamp per transaction) and would order siblings non-deterministically.
+    created = [
+        p for t, p in rec.events
+        if t == NODE_CREATED and p["kind"] == NodeKind.CANDIDATE.value
+    ]
+    child_ids = [p["id"] for p in created]
+    assert [p["title"] for p in created] == ["C1", "C2", "C3"]
+
+    # 3 Evaluation rows persisted; scores associate to the right child (1, 2, 3)
+    # despite later children resolving first.
+    evals = (await db_session.execute(select(Evaluation))).scalars().all()
+    assert len(evals) == 3
+    score_by_node = {str(e.node_id): float(e.score) for e in evals}
+    assert [score_by_node[cid] for cid in child_ids] == [1.0, 2.0, 3.0]
+
+    # evaluation.completed events emitted in child order despite reversed timing.
+    ev_node_ids = [p["node_id"] for t, p in rec.events if t == EVALUATION_COMPLETED]
+    assert ev_node_ids == child_ids
 
 
 def test_emitter_alias_importable() -> None:

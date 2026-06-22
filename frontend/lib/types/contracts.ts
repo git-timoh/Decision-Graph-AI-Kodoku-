@@ -98,6 +98,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions/{session_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Run */
+        post: operations["start_run_sessions__session_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/interrupt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Interrupt Run */
+        post: operations["interrupt_run_sessions__session_id__interrupt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Settings */
+        get: operations["read_settings_settings_get"];
+        /** Update Settings */
+        put: operations["update_settings_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Settings
+         * @description Connection check: one tiny completion on the `evaluate` role client.
+         *
+         *     Never raises — any failure (bad key, unreachable provider, etc.) is
+         *     reported as `{ok: false, error: <message>}` rather than propagated, since
+         *     this is a smoke check, not a critical endpoint. The error message comes
+         *     from the provider's exception only; no stored key is ever included.
+         */
+        post: operations["test_settings_settings_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -177,6 +254,11 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** InterruptResponse */
+        InterruptResponse: {
+            /** Interrupted */
+            interrupted: boolean;
+        };
         /** NodeDTO */
         NodeDTO: {
             /**
@@ -215,6 +297,18 @@ export interface components {
          * @enum {string}
          */
         NodeStatus: "pending" | "active" | "pruned" | "kept" | "expanded";
+        /** ProviderStatus */
+        ProviderStatus: {
+            /** Set */
+            set: boolean;
+            /** Hint */
+            hint?: string | null;
+        };
+        /** RunResponse */
+        RunResponse: {
+            /** Status */
+            status: string;
+        };
         /** SessionConfig */
         SessionConfig: {
             /**
@@ -355,6 +449,39 @@ export interface components {
             /** Title */
             title?: string | null;
             config?: components["schemas"]["SessionConfig"] | null;
+        };
+        /** SettingsResponse */
+        SettingsResponse: {
+            /** Providers */
+            providers: {
+                [key: string]: components["schemas"]["ProviderStatus"];
+            };
+            /** Ollama Base Url */
+            ollama_base_url?: string | null;
+            /** Models */
+            models: {
+                [key: string]: string | null;
+            };
+        };
+        /** SettingsTestResponse */
+        SettingsTestResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Error */
+            error?: string | null;
+        };
+        /** SettingsUpdate */
+        SettingsUpdate: {
+            /** Providers */
+            providers?: {
+                [key: string]: string | null;
+            } | null;
+            /** Ollama Base Url */
+            ollama_base_url?: string | null;
+            /** Models */
+            models?: {
+                [key: string]: string;
+            } | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -624,6 +751,141 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_run_sessions__session_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    interrupt_run_sessions__session_id__interrupt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterruptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_settings_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+        };
+    };
+    update_settings_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_settings_settings_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsTestResponse"];
                 };
             };
         };

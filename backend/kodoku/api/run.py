@@ -7,8 +7,7 @@ because the HTTP request returns long before the background run finishes.
 """
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,11 +20,24 @@ from kodoku.domain.enums import SessionStatus
 from kodoku.engine.events import make_db_emitter
 from kodoku.engine.runner import runner
 from kodoku.engine.state_machine import DecisionEngine
-from kodoku.llm.base import LLMClient
-from kodoku.llm.factory import get_llm_factory
+from kodoku.llm.factory import RoleClients, make_role_clients
 from kodoku.repo.sessions import SessionNotFound, SessionRepository
+from kodoku.repo.settings import SettingsRepository
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["run"])
+
+#: Builds the per-role LLM clients for a run, given the run's DB session.
+#: Overridden in tests to inject a `RoleClients` of fakes.
+RoleClientsBuilder = Callable[[AsyncSession], Awaitable[RoleClients]]
+
+
+async def _default_role_clients(s: AsyncSession) -> RoleClients:
+    return await make_role_clients(SettingsRepository(s))
+
+
+def get_role_clients_builder() -> RoleClientsBuilder:
+    """FastAPI dependency: returns the production role-clients builder."""
+    return _default_role_clients
 
 _RESUMABLE_STATUSES = frozenset({
     SessionStatus.DRAFT.value,
@@ -42,17 +54,15 @@ class InterruptResponse(BaseModel):
     interrupted: bool
 
 
-async def _run_engine(
-    session_id: UUID, make_client: Callable[[dict[str, Any]], LLMClient]
-) -> None:
+async def _run_engine(session_id: UUID, build_clients: RoleClientsBuilder) -> None:
     """Run the engine on a fresh session; commit once, always, on exit."""
     async with get_sessionmaker()() as s:
         session = await SessionRepository(s).get(session_id)
-        llm = make_client(session.config)
+        clients = await build_clients(s)
         engine = DecisionEngine(
             s,
             session,
-            llm,
+            clients,
             make_db_emitter(s, session_id),
             should_stop=lambda: runner.should_stop(session_id),
         )
@@ -66,7 +76,7 @@ async def _run_engine(
 async def start_run(
     session_id: UUID,
     db: AsyncSession = Depends(get_db),  # noqa: B008
-    make_client: Callable[[dict[str, Any]], LLMClient] = Depends(get_llm_factory),  # noqa: B008
+    build_clients: RoleClientsBuilder = Depends(get_role_clients_builder),  # noqa: B008
 ) -> RunResponse:
     try:
         session = await SessionRepository(db).get(session_id)
@@ -81,7 +91,7 @@ async def start_run(
     if runner.is_running(session_id):
         raise HTTPException(status_code=409, detail="session is already running")
 
-    runner.start(session_id, _run_engine(session_id, make_client))
+    runner.start(session_id, _run_engine(session_id, build_clients))
     return RunResponse(status="running")
 
 

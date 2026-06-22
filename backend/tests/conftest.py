@@ -112,7 +112,7 @@ async def truncate_all(db_engine: AsyncEngine) -> AsyncIterator[None]:
     async with db_engine.begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE TABLE events, checkpoints, evaluations, nodes, sessions "
-                "RESTART IDENTITY CASCADE"
+                "TRUNCATE TABLE events, checkpoints, evaluations, nodes, sessions, "
+                "app_settings RESTART IDENTITY CASCADE"
             )
         )

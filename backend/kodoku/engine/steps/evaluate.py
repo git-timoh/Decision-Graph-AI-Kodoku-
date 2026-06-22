@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from string import Template
 
 from pydantic import BaseModel
 
@@ -27,7 +28,8 @@ async def evaluate(
 ) -> EvaluationResult:
     """Score a single candidate node against the goal, clamping the score to [0, 10]."""
     template = _PROMPT_PATH.read_text(encoding="utf-8")
-    prompt = template.format(
+    # safe_substitute (not .format): user-supplied text may contain `{`/`}`.
+    prompt = Template(template).safe_substitute(
         goal=goal,
         candidate_title=candidate_title,
         candidate_content=candidate_content,
