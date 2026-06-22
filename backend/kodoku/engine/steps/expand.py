@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from string import Template
 
 from pydantic import BaseModel
 
@@ -31,7 +32,9 @@ async def expand(
 ) -> list[Candidate]:
     """Generate up to `branching_factor` candidate next steps from a parent node."""
     template = _PROMPT_PATH.read_text(encoding="utf-8")
-    prompt = template.format(
+    # safe_substitute (not .format): user-supplied goal/title/content may contain
+    # `{`/`}` and must never be parsed as a format string.
+    prompt = Template(template).safe_substitute(
         goal=goal,
         parent_title=parent_title,
         parent_content=parent_content,

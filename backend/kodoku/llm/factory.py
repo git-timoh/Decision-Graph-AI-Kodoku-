@@ -1,42 +1,25 @@
-"""Production `LLMClient` factories, exposed as FastAPI dependencies.
+"""Production `LLMClient` factory, exposed as a FastAPI dependency.
 
-Two factories live here:
+`make_role_clients` is the Phase A BYOK factory. It reads stored provider keys
+and per-role model choices from `SettingsRepository` and builds one
+`LiteLLMClient` per role (`expand`/`evaluate`/`synthesize`), resolving each
+client's API key from the store (falling back to the matching provider env
+var) and, for `ollama/*` models, the stored Ollama base URL.
 
-- `make_llm_client`/`get_llm_factory` — the original M4 single-client factory,
-  driven by a session's `config` dict. `kodoku/api/run.py` still uses this;
-  Task 4 retires it once the engine takes `RoleClients` directly.
-- `make_role_clients` — the Phase A BYOK factory. Reads stored provider keys
-  and per-role model choices from `SettingsRepository` and builds one
-  `LiteLLMClient` per role (`expand`/`evaluate`/`synthesize`), resolving each
-  client's API key from the store (falling back to the matching provider env
-  var) and, for `ollama/*` models, the stored Ollama base URL.
-
-Tests override the `get_llm_factory` dependency to inject a `FakeLLMClient`
-instead of talking to a real provider via LiteLLM.
+`kodoku/api/run.py` calls this once per run; tests override the run router's
+role-clients builder to inject a `RoleClients` of `FakeLLMClient`s instead of
+talking to a real provider via LiteLLM.
 """
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from kodoku.llm.base import LLMClient
 
 if TYPE_CHECKING:
     from kodoku.repo.settings import SettingsRepository
-
-
-def make_llm_client(config: dict[str, Any]) -> LLMClient:
-    """Build a `LiteLLMClient` from a session's `config` dict."""
-    from kodoku.llm.litellm_client import LiteLLMClient
-
-    return LiteLLMClient(model=config["model"], temperature=config.get("temperature", 0.7))
-
-
-def get_llm_factory() -> Callable[[dict[str, Any]], LLMClient]:
-    """FastAPI dependency: returns the production client factory."""
-    return make_llm_client
 
 
 # --- Phase A: per-role BYOK client factory -------------------------------

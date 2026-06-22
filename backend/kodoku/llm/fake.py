@@ -18,7 +18,9 @@ class FakeLLMClient:
         self,
         completions: list[str] | None = None,
         chunks: list[str] | None = None,
+        model: str = "fake",
     ) -> None:
+        self.model = model
         self.completions: list[str] = list(completions) if completions is not None else []
         self.chunks: list[str] = list(chunks) if chunks is not None else [""]
         self.calls: list[tuple[str, str]] = []
