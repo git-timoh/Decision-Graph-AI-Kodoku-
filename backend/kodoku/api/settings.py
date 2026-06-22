@@ -6,6 +6,8 @@ exposes whether a key is set and a 4-character hint.
 """
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,12 +16,29 @@ from kodoku.api.dtos import (
     PROVIDER_NAMES,
     ProviderStatus,
     SettingsResponse,
+    SettingsTestResponse,
     SettingsUpdate,
 )
 from kodoku.db.session import get_db
+from kodoku.llm.factory import RoleClients, make_role_clients
 from kodoku.repo.settings import SettingsRepository
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+#: Builds the per-role LLM clients to connection-test against, given the
+#: request's DB session. Overridden in tests to inject a `RoleClients` of
+#: fakes so `/settings/test` never makes a real network call.
+RoleClientsBuilder = Callable[[AsyncSession], Awaitable[RoleClients]]
+
+
+async def _default_role_clients(s: AsyncSession) -> RoleClients:
+    return await make_role_clients(SettingsRepository(s))
+
+
+def get_role_clients_builder() -> RoleClientsBuilder:
+    """FastAPI dependency: returns the production role-clients builder."""
+    return _default_role_clients
+
 
 _HINT_LEN = 4
 
@@ -88,3 +107,23 @@ async def update_settings(
 
     raw = await repo.get_all()
     return _to_response(raw)
+
+
+@router.post("/test", response_model=SettingsTestResponse)
+async def test_settings(
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    build_clients: RoleClientsBuilder = Depends(get_role_clients_builder),  # noqa: B008
+) -> SettingsTestResponse:
+    """Connection check: one tiny completion on the `evaluate` role client.
+
+    Never raises — any failure (bad key, unreachable provider, etc.) is
+    reported as `{ok: false, error: <message>}` rather than propagated, since
+    this is a smoke check, not a critical endpoint. The error message comes
+    from the provider's exception only; no stored key is ever included.
+    """
+    try:
+        clients = await build_clients(db)
+        await clients.evaluate.complete(system="ping", prompt="Reply with OK")
+    except Exception as exc:  # noqa: BLE001 — surface any provider error verbatim
+        return SettingsTestResponse(ok=False, error=str(exc))
+    return SettingsTestResponse(ok=True, error=None)

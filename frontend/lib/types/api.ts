@@ -11,6 +11,10 @@ export type SessionConfig = components["schemas"]["SessionConfig"];
 export type NodeDTO = components["schemas"]["NodeDTO"];
 export type EvaluationDTO = components["schemas"]["EvaluationDTO"];
 export type CheckpointDTO = components["schemas"]["CheckpointDTO"];
+export type ProviderStatus = components["schemas"]["ProviderStatus"];
+export type SettingsResponse = components["schemas"]["SettingsResponse"];
+export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
+export type SettingsTestResponse = components["schemas"]["SettingsTestResponse"];
 
 export type ListSessionsPath = paths["/sessions"]["get"];
 export type CreateSessionPath = paths["/sessions"]["post"];

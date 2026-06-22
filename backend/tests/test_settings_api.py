@@ -12,7 +12,10 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
+from kodoku.api.settings import RoleClientsBuilder, get_role_clients_builder
 from kodoku.db.session import get_db
+from kodoku.llm.factory import RoleClients
+from kodoku.llm.fake import FakeLLMClient
 from kodoku.main import create_app
 
 
@@ -38,6 +41,33 @@ async def client(
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+
+
+def _make_test_client(
+    db_engine: AsyncEngine, build_clients: RoleClientsBuilder
+) -> AsyncClient:
+    """A `client`-style fixture, but with the `/settings/test` role-clients
+    builder overridden to inject a fake instead of talking to a real
+    provider via LiteLLM."""
+    sessionmaker = async_sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    async def _override_db() -> AsyncIterator[AsyncSession]:
+        async with sessionmaker() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    def _override_role_clients_builder() -> RoleClientsBuilder:
+        return build_clients
+
+    app = create_app()
+    app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_role_clients_builder] = _override_role_clients_builder
+    transport = ASGITransport(app=app)
+    return AsyncClient(transport=transport, base_url="http://test")
 
 
 @pytest.mark.asyncio
@@ -189,3 +219,42 @@ async def test_put_ollama_base_url_null_clears_it(client: AsyncClient) -> None:
 
     body = (await client.get("/settings")).json()
     assert body["ollama_base_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_test_endpoint_ok_when_evaluate_client_succeeds(db_engine: AsyncEngine) -> None:
+    async def _build(_s: AsyncSession) -> RoleClients:
+        fake = FakeLLMClient(completions=["OK"])
+        return RoleClients(expand=fake, evaluate=fake, synthesize=fake)
+
+    async with _make_test_client(db_engine, _build) as client:
+        resp = await client.post("/settings/test")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "error": None}
+
+
+@pytest.mark.asyncio
+async def test_test_endpoint_reports_error_when_evaluate_client_raises(
+    db_engine: AsyncEngine,
+) -> None:
+    class _RaisingClient:
+        model = "fake"
+
+        async def complete(self, *, system: str, prompt: str, json_object: bool = False) -> str:
+            raise RuntimeError("invalid API key for provider")
+
+        async def stream(self, *, system: str, prompt: str) -> AsyncIterator[str]:
+            yield ""
+
+    async def _build(_s: AsyncSession) -> RoleClients:
+        bad = _RaisingClient()
+        return RoleClients(expand=bad, evaluate=bad, synthesize=bad)  # type: ignore[arg-type]
+
+    async with _make_test_client(db_engine, _build) as client:
+        resp = await client.post("/settings/test")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["error"] == "invalid API key for provider"

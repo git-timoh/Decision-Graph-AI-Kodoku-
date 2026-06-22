@@ -6,6 +6,9 @@ import type {
   SessionListItem,
   SessionResponse,
   SessionUpdate,
+  SettingsResponse,
+  SettingsTestResponse,
+  SettingsUpdate,
 } from "@/lib/types/api";
 
 const BASE_URL =
@@ -82,6 +85,19 @@ export const api = {
 
   interruptSession: (id: string) =>
     request<void>(`/sessions/${id}/interrupt`, {
+      method: "POST",
+    }),
+
+  getSettings: () => request<SettingsResponse>("/settings"),
+
+  putSettings: (body: SettingsUpdate) =>
+    request<SettingsResponse>("/settings", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  testSettings: () =>
+    request<SettingsTestResponse>("/settings/test", {
       method: "POST",
     }),
 };

@@ -162,6 +162,13 @@ class SettingsResponse(BaseModel):
     models: dict[str, str | None]
 
 
+class SettingsTestResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    error: str | None = None
+
+
 class SettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
