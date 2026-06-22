@@ -178,3 +178,16 @@ class Event(Base):
     session: Mapped[Session] = relationship(back_populates="events")
 
     __table_args__ = (Index("ix_events_session_id_id", "session_id", "id"),)
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
