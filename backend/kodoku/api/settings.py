@@ -44,7 +44,8 @@ def _to_response(raw: dict[str, str]) -> SettingsResponse:
     for name in PROVIDER_NAMES:
         value = raw.get(_provider_key(name))
         if value:
-            providers[name] = ProviderStatus(set=True, hint=value[-_HINT_LEN:])
+            hint = value[-_HINT_LEN:] if len(value) > _HINT_LEN else None
+            providers[name] = ProviderStatus(set=True, hint=hint)
         else:
             providers[name] = ProviderStatus(set=False, hint=None)
 

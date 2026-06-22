@@ -79,6 +79,24 @@ async def test_put_provider_key_then_get_masks_secret(client: AsyncClient) -> No
 
 
 @pytest.mark.asyncio
+async def test_put_short_provider_key_then_get_does_not_disclose_hint(client: AsyncClient) -> None:
+    short_secret = "abc"
+    put_resp = await client.put("/settings", json={"providers": {"anthropic": short_secret}})
+    assert put_resp.status_code == 200
+
+    get_resp = await client.get("/settings")
+    assert get_resp.status_code == 200
+    body = get_resp.json()
+
+    assert body["providers"]["anthropic"] == {"set": True, "hint": None}
+    # A key no longer than the hint length must never be disclosed, in full or in part.
+    assert short_secret not in put_resp.text
+    assert short_secret not in get_resp.text
+    assert short_secret not in json.dumps(put_resp.json())
+    assert short_secret not in json.dumps(body)
+
+
+@pytest.mark.asyncio
 async def test_put_null_clears_provider_key(client: AsyncClient) -> None:
     await client.put("/settings", json={"providers": {"openai": "sk-oai-abcd1234"}})
 
