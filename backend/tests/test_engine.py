@@ -565,6 +565,80 @@ async def test_no_budget_runs_to_completion(db_session: AsyncSession) -> None:
     assert session.status == SessionStatus.DONE.value
 
 
+async def test_branch_override_expands_via_override_client_and_tags(
+    db_session: AsyncSession,
+) -> None:
+    # branching_factor=1, max_depth=2: root -> A (slot 0 -> override model),
+    # A expands (depth 1 < 2) via the override client into A2.
+    session = await _make_session(db_session, branching_factor=1, max_depth=2)
+    session.config["branch_models"] = ["override/model"]
+    rec = _Recorder()
+    # Default client: root expand (A), eval A, eval A2. A's expansion is the
+    # override client's job, so it is NOT in this FIFO.
+    default = FakeLLMClient(
+        completions=[json.dumps(_expand("A")), json.dumps(_eval(8.0)), json.dumps(_eval(8.0))],
+        chunks=["done"],
+    )
+    override = FakeLLMClient(completions=[json.dumps(_expand("A2"))])
+    engine = DecisionEngine(
+        db_session, session, _roles(default), rec,
+        expand_overrides={"override/model": override},
+    )
+    await engine.run()
+
+    nodes = (await db_session.execute(
+        select(Node).where(Node.session_id == session.id,
+                            Node.kind == NodeKind.CANDIDATE.value))).scalars().all()
+    by_title = {n.title: n for n in nodes}
+    assert by_title["A"].model == "override/model"      # slot 0
+    assert by_title["A2"].model == "override/model"     # inherited from A
+    assert len(override.calls) == 1                      # the override expanded A
+    # node.created for A carries the model tag.
+    a_created = next(p for t, p in rec.events
+                     if t == NODE_CREATED and p["title"] == "A")
+    assert a_created["model"] == "override/model"
+
+
+async def test_empty_slot_falls_back_to_default(db_session: AsyncSession) -> None:
+    session = await _make_session(db_session, branching_factor=1, max_depth=2)
+    session.config["branch_models"] = [""]  # slot 0 explicitly default
+    rec = _Recorder()
+    default = FakeLLMClient(
+        completions=[json.dumps(_expand("A")), json.dumps(_eval(8.0)),
+                     json.dumps(_expand("A2")), json.dumps(_eval(8.0))],
+        chunks=["done"],
+    )
+    override = FakeLLMClient(completions=[json.dumps(_expand("NEVER"))])
+    engine = DecisionEngine(
+        db_session, session, _roles(default), rec,
+        expand_overrides={"override/model": override},
+    )
+    await engine.run()
+
+    nodes = (await db_session.execute(
+        select(Node).where(Node.session_id == session.id,
+                            Node.kind == NodeKind.CANDIDATE.value))).scalars().all()
+    assert all(n.model is None for n in nodes)
+    assert len(override.calls) == 0  # override never used
+
+
+async def test_no_branch_models_tags_none(db_session: AsyncSession) -> None:
+    session = await _make_session(db_session, branching_factor=2, max_depth=1)
+    # default config: branch_models is None
+    rec = _Recorder()
+    llm = FakeLLMClient(
+        completions=[json.dumps(_expand("A", "B")), json.dumps(_eval(8.0)),
+                     json.dumps(_eval(3.0))],
+        chunks=["done"],
+    )
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
+    await engine.run()
+
+    a_created = next(p for t, p in rec.events
+                     if t == NODE_CREATED and p["title"] == "A")
+    assert a_created["model"] is None
+
+
 async def test_cost_base_seeds_from_existing(db_session: AsyncSession) -> None:
     from decimal import Decimal
     session = await _make_session(db_session, branching_factor=2, max_depth=1)

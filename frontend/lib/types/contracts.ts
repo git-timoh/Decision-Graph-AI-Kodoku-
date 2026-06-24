@@ -398,6 +398,8 @@ export interface components {
             decide_mode: "threshold" | "judge";
             /** Budget Usd */
             budget_usd?: number | null;
+            /** Branch Models */
+            branch_models?: string[] | null;
         };
         /** SessionCreate */
         SessionCreate: {
