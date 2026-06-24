@@ -331,6 +331,12 @@ export interface components {
              * @default 0.7
              */
             temperature: number;
+            /**
+             * Hitl Mode
+             * @default autopilot
+             * @enum {string}
+             */
+            hitl_mode: "autopilot" | "every_branch";
         };
         /** SessionCreate */
         SessionCreate: {

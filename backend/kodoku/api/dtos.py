@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -26,6 +26,7 @@ class SessionConfig(BaseModel):
     branching_factor: int = Field(default=3, ge=1, le=10)
     max_depth: int = Field(default=3, ge=1, le=10)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    hitl_mode: Literal["autopilot", "every_branch"] = "autopilot"
 
     @field_validator("model")
     @classmethod

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 import pytest
@@ -11,10 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kodoku.api.dtos import SessionConfig, SessionCreate
-from kodoku.db.models import Evaluation, Node
+from kodoku.db.models import Checkpoint, Evaluation, Node
 from kodoku.db.models import Session as SessionModel
-from kodoku.domain.enums import NodeKind, NodeStatus
+from kodoku.domain.enums import CheckpointKind, NodeKind, NodeStatus
 from kodoku.engine.events import (
+    CHECKPOINT_REACHED,
     EVALUATION_COMPLETED,
     NODE_CREATED,
     SESSION_DONE,
@@ -51,12 +52,18 @@ class _Recorder:
 
 
 async def _make_session(
-    db: AsyncSession, *, branching_factor: int = 2, max_depth: int = 2
+    db: AsyncSession,
+    *,
+    branching_factor: int = 2,
+    max_depth: int = 2,
+    hitl_mode: Literal["autopilot", "every_branch"] = "autopilot",
 ) -> SessionModel:
     repo = SessionRepository(db)
     payload = SessionCreate(
         goal="Brainstorm side-project ideas combining AI and music creatively.",
-        config=SessionConfig(branching_factor=branching_factor, max_depth=max_depth),
+        config=SessionConfig(
+            branching_factor=branching_factor, max_depth=max_depth, hitl_mode=hitl_mode
+        ),
     )
     return await repo.create(payload)
 
@@ -299,3 +306,101 @@ def test_emitter_alias_importable() -> None:
     from kodoku.engine.events import Emitter, make_db_emitter  # noqa: F401
 
     assert callable(make_db_emitter)
+
+
+# expand root -> A, B; both evaluated, then the run must pause for human review
+# before any keep/prune marking or further expansion happens.
+_PAUSE_RUN_SCRIPT = [
+    _expand("A", "B"),
+    _eval(8.0),  # would-be kept
+    _eval(3.0),  # would-be pruned
+]
+
+
+async def test_every_branch_mode_pauses_at_first_checkpoint(db_session: AsyncSession) -> None:
+    session = await _make_session(db_session, hitl_mode="every_branch")
+    llm = FakeLLMClient(
+        completions=[json.dumps(o) for o in _PAUSE_RUN_SCRIPT],
+        chunks=["unused"],
+    )
+    rec = _Recorder()
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
+
+    await engine.run()
+
+    assert session.status == "awaiting_human"
+    assert session.current_step is None
+    assert session.final_synthesis is None
+
+    checkpoints = (
+        (await db_session.execute(select(Checkpoint).where(Checkpoint.session_id == session.id)))
+        .scalars()
+        .all()
+    )
+    assert len(checkpoints) == 1
+    checkpoint = checkpoints[0]
+    assert checkpoint.kind == CheckpointKind.POST_EVALUATE.value
+    assert checkpoint.resolved_at is None
+
+    payload = checkpoint.payload
+    assert sorted(payload.keys()) == ["candidates", "proposed_keep", "proposed_prune"]
+    assert len(payload["candidates"]) == 2
+    for cand in payload["candidates"]:
+        assert sorted(cand.keys()) == [
+            "content",
+            "critique",
+            "dimensions",
+            "id",
+            "score",
+            "title",
+        ]
+    assert len(payload["proposed_keep"]) == 1
+    assert len(payload["proposed_prune"]) == 1
+
+    assert rec.count(CHECKPOINT_REACHED) == 1
+    checkpoint_payloads = [p for t, p in rec.events if t == CHECKPOINT_REACHED]
+    assert checkpoint_payloads[0]["checkpoint_id"] == str(checkpoint.id)
+    assert checkpoint_payloads[0]["kind"] == CheckpointKind.POST_EVALUATE.value
+
+    # The 2 candidates persisted and still ACTIVE — not marked kept/pruned.
+    nodes = (
+        (await db_session.execute(select(Node).where(Node.session_id == session.id)))
+        .scalars()
+        .all()
+    )
+    candidates = [n for n in nodes if n.kind == NodeKind.CANDIDATE.value]
+    assert len(candidates) == 2
+    assert all(n.status == NodeStatus.ACTIVE.value for n in candidates)
+
+    # The parent (root) is marked EXPANDED so it isn't re-expanded later.
+    root = next(n for n in nodes if n.kind == NodeKind.ROOT.value)
+    assert root.status == NodeStatus.EXPANDED.value
+
+    # No synthesis, no SESSION_DONE.
+    assert SESSION_DONE not in rec.types()
+    assert SYNTHESIS_COMPLETED not in rec.types()
+
+
+async def test_autopilot_mode_unaffected_by_hitl_feature(db_session: AsyncSession) -> None:
+    """Regression guard: autopilot must remain byte-for-byte unchanged."""
+    session = await _make_session(db_session, hitl_mode="autopilot")
+    llm = FakeLLMClient(
+        completions=[json.dumps(o) for o in _FULL_RUN_SCRIPT],
+        chunks=["Final ", "answer."],
+    )
+    rec = _Recorder()
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
+
+    await engine.run()
+
+    assert session.status == "done"
+    assert session.final_synthesis == "Final answer."
+
+    checkpoints = (
+        (await db_session.execute(select(Checkpoint).where(Checkpoint.session_id == session.id)))
+        .scalars()
+        .all()
+    )
+    assert checkpoints == []
+    assert rec.count(CHECKPOINT_REACHED) == 0
+    assert SESSION_DONE in rec.types()
