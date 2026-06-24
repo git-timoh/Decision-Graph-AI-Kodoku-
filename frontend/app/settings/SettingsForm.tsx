@@ -41,6 +41,7 @@ const MODEL_PRESETS = [
   { value: "anthropic/claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
   { value: "openai/gpt-4o-mini", label: "OpenAI GPT-4o mini" },
   { value: "deepseek/deepseek-chat", label: "DeepSeek Chat" },
+  { value: "openrouter/deepseek/deepseek-chat", label: "OpenRouter: DeepSeek Chat" },
   { value: "openrouter/zhipu/glm-4", label: "OpenRouter: Zhipu GLM-4" },
   { value: "openrouter/anthropic/claude-3.5-sonnet", label: "OpenRouter: Claude 3.5 Sonnet" },
   { value: "ollama/llama3.1", label: "Ollama (local dev)" },
