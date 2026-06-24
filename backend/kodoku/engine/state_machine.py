@@ -23,6 +23,7 @@ from kodoku.db.models import Session as SessionModel
 from kodoku.domain.enums import CheckpointKind, NodeKind, NodeStatus, SessionStatus
 from kodoku.engine.events import (
     CHECKPOINT_REACHED,
+    DECIDE_COMPLETED,
     ENGINE_STATE_CHANGED,
     EVALUATION_COMPLETED,
     NODE_CREATED,
@@ -38,6 +39,7 @@ from kodoku.engine.frontier import rebuild_frontier
 from kodoku.engine.steps.decide import Decision, decide
 from kodoku.engine.steps.evaluate import EvaluationResult, evaluate
 from kodoku.engine.steps.expand import expand
+from kodoku.engine.steps.judge import JudgeCandidate, decide_with_judge
 from kodoku.engine.steps.synthesize import synthesize
 from kodoku.llm.factory import RoleClients
 
@@ -196,8 +198,33 @@ class DecisionEngine:
             )
             scored.append((child.id, ev.score))
 
-        decision = decide(
-            scored, depth=parent.depth + 1, max_depth=self.config.max_depth
+        if self.config.decide_mode == "judge":
+            judge_cands = [
+                JudgeCandidate(
+                    id=child.id, title=child.title, content=child.content,
+                    score=ev.score, critique=ev.critique, dimensions=ev.dimensions,
+                )
+                for child, ev in zip(children, results, strict=True)
+            ]
+            outcome = await decide_with_judge(
+                self.clients.evaluate, goal=self.session.goal,
+                candidates=judge_cands, depth=parent.depth + 1,
+                max_depth=self.config.max_depth,
+            )
+            decision, rationale, source = outcome.decision, outcome.rationale, outcome.source
+        else:
+            decision = decide(scored, depth=parent.depth + 1, max_depth=self.config.max_depth)
+            rationale, source = "", "threshold"
+
+        await self.emit(
+            DECIDE_COMPLETED,
+            {
+                "parent_id": str(parent.id),
+                "keep": [str(cid) for cid in decision.keep],
+                "prune": [str(cid) for cid in decision.prune],
+                "rationale": rationale,
+                "source": source,
+            },
         )
 
         if self.config.hitl_mode == "every_branch":

@@ -16,6 +16,7 @@ from kodoku.db.models import Session as SessionModel
 from kodoku.domain.enums import CheckpointKind, NodeKind, NodeStatus
 from kodoku.engine.events import (
     CHECKPOINT_REACHED,
+    DECIDE_COMPLETED,
     EVALUATION_COMPLETED,
     NODE_CREATED,
     SESSION_DONE,
@@ -404,3 +405,77 @@ async def test_autopilot_mode_unaffected_by_hitl_feature(db_session: AsyncSessio
     assert checkpoints == []
     assert rec.count(CHECKPOINT_REACHED) == 0
     assert SESSION_DONE in rec.types()
+
+
+async def test_judge_mode_drives_keep_prune_and_emits_decide_completed(
+    db_session: AsyncSession,
+) -> None:
+    # branching_factor=2, max_depth=1: expand root -> A, B; judge keeps B, prunes A.
+    session = await _make_session(db_session, branching_factor=2, max_depth=1)
+    session.config["decide_mode"] = "judge"
+
+    # We can't know child ids until after expand, so the judge selects by a
+    # sentinel the engine maps to ids: instead, script the judge to keep the
+    # LOWER-scored child to prove the judge (not the threshold) decided.
+    # Use a custom fake that, on its judge call, returns keep=[<lower-scored id>].
+    rec = _Recorder()
+
+    class _JudgeFake(FakeLLMClient):
+        async def complete(self, *, system, prompt, json_object=False):  # type: ignore[override]
+            self.calls.append((system, prompt))
+            # expand + eval calls are scripted; the judge call is detected by the
+            # candidates_block containing both ids — return keep=second id.
+            if "keep" in prompt and "prune" in prompt and "id=" in prompt:
+                import re
+                ids = re.findall(r"id=([0-9a-f-]{36})", prompt)
+                return json.dumps({"keep": [ids[1]], "prune": [ids[0]],
+                                   "rationale": "judge chose B"})
+            return self.completions.pop(0)
+
+    llm = _JudgeFake(
+        completions=[json.dumps(_expand("A", "B")), json.dumps(_eval(9.0)),
+                     json.dumps(_eval(2.0))],
+        chunks=["done"],
+    )
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
+    await engine.run()
+
+    nodes = (await db_session.execute(
+        select(Node).where(Node.session_id == session.id,
+                            Node.kind == NodeKind.CANDIDATE.value))).scalars().all()
+    by_title = {n.title: n for n in nodes}
+    # Judge kept B (score 2.0) and pruned A (score 9.0) — opposite of threshold.
+    assert by_title["B"].status == NodeStatus.KEPT.value
+    assert by_title["A"].status == NodeStatus.PRUNED.value
+    assert rec.count(DECIDE_COMPLETED) == 1
+    payload = next(p for t, p in rec.events if t == DECIDE_COMPLETED)
+    assert payload["source"] == "judge"
+    assert payload["rationale"] == "judge chose B"
+
+
+# (`_JudgeFake` is defined inline above; no module-level judge stub is needed.)
+
+
+async def test_threshold_mode_unchanged_and_emits_decide_completed(
+    db_session: AsyncSession,
+) -> None:
+    session = await _make_session(db_session, branching_factor=2, max_depth=1)
+    # default decide_mode == "threshold"
+    rec = _Recorder()
+    llm = FakeLLMClient(
+        completions=[json.dumps(_expand("A", "B")), json.dumps(_eval(8.0)),
+                     json.dumps(_eval(3.0))],
+        chunks=["done"],
+    )
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
+    await engine.run()
+
+    nodes = (await db_session.execute(
+        select(Node).where(Node.session_id == session.id,
+                            Node.kind == NodeKind.CANDIDATE.value))).scalars().all()
+    by_title = {n.title: n for n in nodes}
+    assert by_title["A"].status == NodeStatus.KEPT.value   # 8.0 >= 6.0
+    assert by_title["B"].status == NodeStatus.PRUNED.value
+    payload = next(p for t, p in rec.events if t == DECIDE_COMPLETED)
+    assert payload["source"] == "threshold"
+    assert payload["rationale"] == ""

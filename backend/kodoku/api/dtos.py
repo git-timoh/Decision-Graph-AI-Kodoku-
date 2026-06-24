@@ -27,6 +27,7 @@ class SessionConfig(BaseModel):
     max_depth: int = Field(default=3, ge=1, le=10)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     hitl_mode: Literal["autopilot", "every_branch"] = "autopilot"
+    decide_mode: Literal["threshold", "judge"] = "threshold"
 
     @field_validator("model")
     @classmethod

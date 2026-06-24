@@ -390,6 +390,12 @@ export interface components {
              * @enum {string}
              */
             hitl_mode: "autopilot" | "every_branch";
+            /**
+             * Decide Mode
+             * @default threshold
+             * @enum {string}
+             */
+            decide_mode: "threshold" | "judge";
         };
         /** SessionCreate */
         SessionCreate: {

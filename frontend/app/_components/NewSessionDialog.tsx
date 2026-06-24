@@ -49,6 +49,21 @@ const HITL_OPTIONS: { value: HitlMode; label: string; description: string }[] = 
   },
 ];
 
+type DecideMode = "threshold" | "judge";
+
+const DECIDE_OPTIONS: { value: DecideMode; label: string; description: string }[] = [
+  {
+    value: "threshold",
+    label: "Threshold",
+    description: "Deterministic score cutoff to prune candidates.",
+  },
+  {
+    value: "judge",
+    label: "LLM judge",
+    description: "LLM comparatively decides which candidates to keep.",
+  },
+];
+
 export function NewSessionDialog() {
   const router = useRouter();
   const refreshSidebar = useSessionStore((s) => s.refreshSidebar);
@@ -58,6 +73,7 @@ export function NewSessionDialog() {
   const [title, setTitle] = useState("");
   const [model, setModel] = useState(MODEL_PRESETS[0].value);
   const [hitlMode, setHitlMode] = useState<HitlMode>("autopilot");
+  const [decideMode, setDecideMode] = useState<DecideMode>("threshold");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,6 +82,7 @@ export function NewSessionDialog() {
     setTitle("");
     setModel(MODEL_PRESETS[0].value);
     setHitlMode("autopilot");
+    setDecideMode("threshold");
     setError(null);
     setSubmitting(false);
   }
@@ -84,6 +101,7 @@ export function NewSessionDialog() {
           max_depth: 3,
           temperature: 0.7,
           hitl_mode: hitlMode,
+          decide_mode: decideMode,
         },
       });
       refreshSidebar();
@@ -186,6 +204,31 @@ export function NewSessionDialog() {
             </div>
             <p className="text-xs text-muted-foreground">
               {HITL_OPTIONS.find((option) => option.value === hitlMode)?.description}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Decision mode</Label>
+            <div className="inline-flex w-full rounded-md border border-input p-0.5">
+              {DECIDE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setDecideMode(option.value)}
+                  aria-pressed={decideMode === option.value}
+                  className={cn(
+                    "flex-1 rounded-[5px] px-2.5 py-1.5 text-sm font-medium transition-colors",
+                    decideMode === option.value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {DECIDE_OPTIONS.find((option) => option.value === decideMode)?.description}
             </p>
           </div>
 
