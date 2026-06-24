@@ -28,6 +28,7 @@ class SessionConfig(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     hitl_mode: Literal["autopilot", "every_branch"] = "autopilot"
     decide_mode: Literal["threshold", "judge"] = "threshold"
+    budget_usd: float | None = Field(default=None, ge=0)
 
     @field_validator("model")
     @classmethod
@@ -123,6 +124,7 @@ class SessionResponse(_ORM):
     config: dict[str, Any]
     current_step: str | None
     final_synthesis: str | None
+    cost_usd: float
     created_at: datetime
     updated_at: datetime
 

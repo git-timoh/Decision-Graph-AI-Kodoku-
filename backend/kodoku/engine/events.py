@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from kodoku.ws.emit import emit_event
 
-# Event-type string constants — the twelve names the engine emits.
+# Event-type string constants — the fourteen names the engine emits.
 SESSION_STARTED = "session.started"
 ENGINE_STATE_CHANGED = "engine.state_changed"
 NODE_CREATED = "node.created"
@@ -28,6 +28,8 @@ SESSION_ERROR = "session.error"
 CHECKPOINT_REACHED = "checkpoint.reached"
 CHECKPOINT_RESOLVED = "checkpoint.resolved"
 DECIDE_COMPLETED = "decide.completed"
+COST_UPDATED = "cost.updated"
+BUDGET_EXCEEDED = "budget.exceeded"
 
 # An emitter takes an event type + payload and persists/broadcasts it.
 Emitter = Callable[[str, dict[str, Any]], Awaitable[None]]

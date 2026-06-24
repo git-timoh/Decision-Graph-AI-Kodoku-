@@ -22,7 +22,9 @@ from kodoku.db.models import Checkpoint, Evaluation, Node
 from kodoku.db.models import Session as SessionModel
 from kodoku.domain.enums import CheckpointKind, NodeKind, NodeStatus, SessionStatus
 from kodoku.engine.events import (
+    BUDGET_EXCEEDED,
     CHECKPOINT_REACHED,
+    COST_UPDATED,
     DECIDE_COMPLETED,
     ENGINE_STATE_CHANGED,
     EVALUATION_COMPLETED,
@@ -66,6 +68,8 @@ class DecisionEngine:
         self.config = SessionConfig(**session.config)
         self._frontier: deque[UUID] = deque()
         self._paused = False
+        self._budget_exceeded = False
+        self._cost_base = float(session.cost_usd or 0)
 
     async def run(self) -> None:
         try:
@@ -93,12 +97,30 @@ class DecisionEngine:
         await self.db.flush()
 
         # 2. Frontier BFS.
-        while self._frontier and not self.should_stop() and not self._paused:
+        while (
+            self._frontier
+            and not self.should_stop()
+            and not self._paused
+            and not self._budget_exceeded
+        ):
             await self._expand_one(self._frontier.popleft())
+            # Skip the cost/budget check when the branch paused for HITL review:
+            # the run already stopped as AWAITING_HUMAN, and emitting
+            # budget.exceeded here would wrongly flip the live UI to the budget
+            # banner over the checkpoint panel.
+            if not self._paused:
+                await self._update_cost_and_check_budget()
 
         # 2b. Paused for human review at a checkpoint — stop before synthesis.
         # Status/current_step were already set to AWAITING_HUMAN by the pause.
         if self._paused:
+            return
+
+        # Budget hit — stop before synthesis, mirroring the _paused path.
+        if self._budget_exceeded:
+            self.session.status = SessionStatus.PAUSED.value
+            self.session.current_step = None
+            await self.db.flush()
             return
 
         # 3. Cooperative stop.
@@ -239,6 +261,32 @@ class DecisionEngine:
         await self.db.flush()
 
         self._frontier.extend(decision.expand)
+
+    async def _update_cost_and_check_budget(self) -> None:
+        """Sum per-role client cost onto the session and stop if over budget.
+
+        ponytail: synthesis runs after the BFS loop, so its streaming cost is
+        added to the total afterward but is not budget-gated. Acceptable: one
+        cheap call, and the human is already reviewing a stopped run.
+        """
+        total = (
+            self.clients.expand.cost_usd
+            + self.clients.evaluate.cost_usd
+            + self.clients.synthesize.cost_usd
+        )
+        self.session.cost_usd = Decimal(str(self._cost_base + total))
+        await self.db.flush()
+        budget = self.config.budget_usd
+        await self.emit(
+            COST_UPDATED,
+            {"cost_usd": float(self.session.cost_usd), "budget_usd": budget},
+        )
+        if budget is not None and float(self.session.cost_usd) >= budget:
+            self._budget_exceeded = True
+            await self.emit(
+                BUDGET_EXCEEDED,
+                {"cost_usd": float(self.session.cost_usd), "budget_usd": budget},
+            )
 
     async def _pause_for_checkpoint(
         self,

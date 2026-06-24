@@ -396,6 +396,8 @@ export interface components {
              * @enum {string}
              */
             decide_mode: "threshold" | "judge";
+            /** Budget Usd */
+            budget_usd?: number | null;
         };
         /** SessionCreate */
         SessionCreate: {
@@ -433,6 +435,8 @@ export interface components {
             current_step: string | null;
             /** Final Synthesis */
             final_synthesis: string | null;
+            /** Cost Usd */
+            cost_usd: number;
             /**
              * Created At
              * Format: date-time
@@ -493,6 +497,8 @@ export interface components {
             current_step: string | null;
             /** Final Synthesis */
             final_synthesis: string | null;
+            /** Cost Usd */
+            cost_usd: number;
             /**
              * Created At
              * Format: date-time

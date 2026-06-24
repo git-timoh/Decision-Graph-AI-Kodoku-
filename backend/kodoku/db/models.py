@@ -42,6 +42,9 @@ class Session(Base):
     config: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default="{}"
     )
+    cost_usd: Mapped[Decimal] = mapped_column(
+        Numeric(12, 6), nullable=False, default=0, server_default="0"
+    )
     current_step: Mapped[str | None] = mapped_column(String, nullable=True)
     final_synthesis: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

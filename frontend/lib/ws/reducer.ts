@@ -63,6 +63,19 @@ export function reduce(state: GraphState, event: WsEvent): GraphState {
     case "synthesis.completed":
       next = { ...state, synthesis: String((p as { text?: string }).text ?? state.synthesis) };
       break;
+    case "cost.updated": {
+      const { cost_usd, budget_usd } = event.payload as unknown as {
+        cost_usd: number;
+        budget_usd: number | null;
+      };
+      next = { ...state, costUsd: cost_usd, budgetUsd: budget_usd };
+      break;
+    }
+    case "budget.exceeded": {
+      const { cost_usd } = event.payload as unknown as { cost_usd: number };
+      next = { ...state, status: "paused", costUsd: cost_usd, budgetExceeded: true };
+      break;
+    }
     default:
       next = state;
   }

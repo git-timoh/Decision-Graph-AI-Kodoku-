@@ -78,6 +78,7 @@ def test_session_response_roundtrip_uuid_and_datetime() -> None:
         "config": {"model": "anthropic/claude-sonnet-4-6"},
         "current_step": None,
         "final_synthesis": None,
+        "cost_usd": 0.0,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
     }
@@ -99,6 +100,7 @@ def test_session_detail_response_bundles_nested() -> None:
         "config": {},
         "current_step": None,
         "final_synthesis": None,
+        "cost_usd": 0.0,
         "created_at": now,
         "updated_at": now,
         "nodes": [
