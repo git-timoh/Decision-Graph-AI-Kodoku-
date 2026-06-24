@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kodoku.api.dtos import ResumeRequest
+from kodoku.api.dtos import ResumeRequest, SessionConfig
 from kodoku.db.engine import get_sessionmaker
 from kodoku.db.models import Checkpoint, Node
 from kodoku.db.session import get_db
@@ -24,7 +24,8 @@ from kodoku.domain.enums import NodeStatus, SessionStatus
 from kodoku.engine.events import CHECKPOINT_RESOLVED, NODE_UPDATED, make_db_emitter
 from kodoku.engine.runner import runner
 from kodoku.engine.state_machine import DecisionEngine
-from kodoku.llm.factory import RoleClients, make_role_clients
+from kodoku.llm.base import LLMClient
+from kodoku.llm.factory import RoleClients, build_client_for_model, make_role_clients
 from kodoku.repo.sessions import SessionNotFound, SessionRepository
 from kodoku.repo.settings import SettingsRepository
 
@@ -67,12 +68,20 @@ async def _run_engine(session_id: UUID, build_clients: RoleClientsBuilder) -> No
     async with get_sessionmaker()() as s:
         session = await SessionRepository(s).get(session_id)
         clients = await build_clients(s)
+        cfg = SessionConfig(**session.config)
+        expand_overrides: dict[str, LLMClient] = {}
+        if cfg.branch_models:
+            raw = await SettingsRepository(s).get_all()
+            expand_overrides = {
+                m: build_client_for_model(m, raw) for m in set(cfg.branch_models) if m
+            }
         engine = DecisionEngine(
             s,
             session,
             clients,
             make_db_emitter(s, session_id),
             should_stop=lambda: runner.should_stop(session_id),
+            expand_overrides=expand_overrides,
         )
         try:
             await engine.run()

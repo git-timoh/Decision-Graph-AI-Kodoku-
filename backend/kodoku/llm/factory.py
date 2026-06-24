@@ -76,12 +76,11 @@ def _resolve_api_key(provider: str, settings: dict[str, str]) -> str | None:
     return None
 
 
-def _build_client(role: str, settings: dict[str, str]) -> LLMClient:
+def build_client_for_model(model: str, settings: dict[str, str]) -> LLMClient:
+    """Build one `LLMClient` for an arbitrary model string, resolving its BYOK key."""
     from kodoku.llm.litellm_client import LiteLLMClient
 
-    model = settings.get(f"model.{role}") or DEFAULT_MODELS[role]
     provider = provider_of(model)
-
     if provider == _OLLAMA_PROVIDER:
         api_key: str | None = None
         api_base = settings.get(_OLLAMA_BASE_URL_KEY) or None
@@ -90,6 +89,11 @@ def _build_client(role: str, settings: dict[str, str]) -> LLMClient:
         api_base = None
 
     return LiteLLMClient(model=model, api_key=api_key, api_base=api_base)
+
+
+def _build_client(role: str, settings: dict[str, str]) -> LLMClient:
+    model = settings.get(f"model.{role}") or DEFAULT_MODELS[role]
+    return build_client_for_model(model, settings)
 
 
 async def make_role_clients(settings: SettingsRepository) -> RoleClients:

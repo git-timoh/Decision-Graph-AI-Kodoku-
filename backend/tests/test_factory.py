@@ -135,3 +135,21 @@ async def test_make_role_clients_unset_role_model_uses_default(
 )
 def test_provider_of_parses_prefix_before_first_slash(model: str, expected_provider: str) -> None:
     assert provider_of(model) == expected_provider
+
+
+def test_build_client_for_model_resolves_key() -> None:
+    from kodoku.llm.factory import build_client_for_model
+
+    client = build_client_for_model("deepseek/deepseek-chat", {"key.deepseek": "sk-test"})
+    assert isinstance(client, LiteLLMClient)
+    assert client.model == "deepseek/deepseek-chat"
+    assert client.api_key == "sk-test"
+
+
+def test_build_client_for_model_ollama_uses_base_url() -> None:
+    from kodoku.llm.factory import build_client_for_model
+
+    client = build_client_for_model("ollama/llama3", {"ollama.base_url": "http://localhost:11434"})
+    assert isinstance(client, LiteLLMClient)
+    assert client.api_base == "http://localhost:11434"
+    assert client.api_key is None

@@ -43,11 +43,19 @@ from kodoku.engine.steps.evaluate import EvaluationResult, evaluate
 from kodoku.engine.steps.expand import expand
 from kodoku.engine.steps.judge import JudgeCandidate, decide_with_judge
 from kodoku.engine.steps.synthesize import synthesize
+from kodoku.llm.base import LLMClient
 from kodoku.llm.factory import RoleClients
 
 #: Max concurrent `evaluate` LLM calls per parent.
 # ponytail: hardcoded module constant — make configurable later.
 EVAL_CONCURRENCY = 4
+
+
+def _slot_model(branch_models: list[str] | None, index: int) -> str | None:
+    """The expand model for branch slot `index`, or None for default/out-of-range."""
+    if branch_models is None or index >= len(branch_models):
+        return None
+    return branch_models[index] or None
 
 
 class DecisionEngine:
@@ -59,6 +67,7 @@ class DecisionEngine:
         emit: Emitter,
         *,
         should_stop: Callable[[], bool] = lambda: False,
+        expand_overrides: dict[str, LLMClient] | None = None,
     ) -> None:
         self.db = db
         self.session = session
@@ -70,6 +79,7 @@ class DecisionEngine:
         self._paused = False
         self._budget_exceeded = False
         self._cost_base = float(session.cost_usd or 0)
+        self._expand_overrides = expand_overrides or {}
 
     async def run(self) -> None:
         try:
@@ -139,8 +149,10 @@ class DecisionEngine:
 
     async def _expand_one(self, parent_id: UUID) -> None:
         parent = await self._node(parent_id)
+        override = self._expand_overrides.get(parent.model) if parent.model else None
+        expand_client = override or self.clients.expand
         cands = await expand(
-            self.clients.expand,
+            expand_client,
             goal=self.session.goal,
             parent_title=parent.title,
             parent_content=parent.content,
@@ -154,7 +166,11 @@ class DecisionEngine:
             return
 
         children: list[Node] = []
-        for cand in cands:
+        for index, cand in enumerate(cands):
+            if parent.parent_id is None:
+                child_model = _slot_model(self.config.branch_models, index)
+            else:
+                child_model = parent.model
             child = Node(
                 session_id=self.session.id,
                 parent_id=parent.id,
@@ -163,6 +179,7 @@ class DecisionEngine:
                 title=cand.title,
                 content=cand.content,
                 status=NodeStatus.ACTIVE.value,
+                model=child_model,
             )
             self.db.add(child)
             children.append(child)
@@ -180,6 +197,7 @@ class DecisionEngine:
                     "title": child.title,
                     "content": child.content,
                     "status": child.status,
+                    "model": child.model,
                 },
             )
 
