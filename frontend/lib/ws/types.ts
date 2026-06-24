@@ -53,6 +53,9 @@ export type GraphState = {
   status: EngineStatus;
   synthesis: string;
   checkpoint: Checkpoint | null;
+  costUsd: number;
+  budgetUsd: number | null;
+  budgetExceeded: boolean;
   lastSeenEventId: number;
 };
 
@@ -62,6 +65,9 @@ export function emptyGraph(): GraphState {
     status: "idle",
     synthesis: "",
     checkpoint: null,
+    costUsd: 0,
+    budgetUsd: null,
+    budgetExceeded: false,
     lastSeenEventId: 0,
   };
 }

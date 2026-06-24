@@ -74,6 +74,7 @@ export function NewSessionDialog() {
   const [model, setModel] = useState(MODEL_PRESETS[0].value);
   const [hitlMode, setHitlMode] = useState<HitlMode>("autopilot");
   const [decideMode, setDecideMode] = useState<DecideMode>("threshold");
+  const [budget, setBudget] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +84,7 @@ export function NewSessionDialog() {
     setModel(MODEL_PRESETS[0].value);
     setHitlMode("autopilot");
     setDecideMode("threshold");
+    setBudget("");
     setError(null);
     setSubmitting(false);
   }
@@ -102,6 +104,7 @@ export function NewSessionDialog() {
           temperature: 0.7,
           hitl_mode: hitlMode,
           decide_mode: decideMode,
+          budget_usd: budget.trim() === "" ? null : Number(budget),
         },
       });
       refreshSidebar();
@@ -229,6 +232,22 @@ export function NewSessionDialog() {
             </div>
             <p className="text-xs text-muted-foreground">
               {DECIDE_OPTIONS.find((option) => option.value === decideMode)?.description}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="budget">Budget (USD, optional)</Label>
+            <Input
+              id="budget"
+              type="number"
+              min="0"
+              step="0.01"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              placeholder="No cap"
+            />
+            <p className="text-xs text-muted-foreground">
+              Stops the run when the session cost passes this amount.
             </p>
           </div>
 

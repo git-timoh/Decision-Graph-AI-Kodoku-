@@ -65,6 +65,8 @@ export function SessionGraphView({
   const status = useSessionStore((s) => s.graph.status);
   const synthesis = useSessionStore((s) => s.graph.synthesis);
   const checkpoint = useSessionStore((s) => s.graph.checkpoint);
+  const costUsd = useSessionStore((s) => s.graph.costUsd);
+  const budgetExceeded = useSessionStore((s) => s.graph.budgetExceeded);
   const connected = useSessionStore((s) => s.connected);
   const keptCount = useSessionStore(
     (s) => Object.values(s.graph.nodes).filter((n) => n.status === "kept").length,
@@ -139,6 +141,9 @@ export function SessionGraphView({
         <span className="text-xs text-muted-foreground">
           {connected ? "● live" : "○ disconnected"}
         </span>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          ${costUsd.toFixed(4)}
+        </span>
         <div className="ml-auto flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={emitDebug} disabled={emitting}>
             {emitting ? "Emitting…" : "Emit debug events"}
@@ -166,6 +171,9 @@ export function SessionGraphView({
       {showResumeBanner && (
         <div className="flex items-center gap-3 border-b border-border bg-amber-500/10 px-6 py-2.5">
           <span className="text-sm text-amber-700">
+            {budgetExceeded && (
+              <span className="font-medium">Budget exceeded — run stopped. </span>
+            )}
             {status === "paused"
               ? `Resume from ${keptCount} kept node${keptCount === 1 ? "" : "s"}`
               : "Retry after error"}
