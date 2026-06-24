@@ -104,7 +104,12 @@ class DecisionEngine:
             and not self._budget_exceeded
         ):
             await self._expand_one(self._frontier.popleft())
-            await self._update_cost_and_check_budget()
+            # Skip the cost/budget check when the branch paused for HITL review:
+            # the run already stopped as AWAITING_HUMAN, and emitting
+            # budget.exceeded here would wrongly flip the live UI to the budget
+            # banner over the checkpoint panel.
+            if not self._paused:
+                await self._update_cost_and_check_budget()
 
         # 2b. Paused for human review at a checkpoint — stop before synthesis.
         # Status/current_step were already set to AWAITING_HUMAN by the pause.

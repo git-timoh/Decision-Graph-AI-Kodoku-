@@ -385,6 +385,29 @@ async def test_every_branch_mode_pauses_at_first_checkpoint(db_session: AsyncSes
     assert SYNTHESIS_COMPLETED not in rec.types()
 
 
+async def test_hitl_pause_suppresses_budget_check(db_session: AsyncSession) -> None:
+    """A branch that pauses for HITL must not also fire budget.exceeded.
+
+    The run stops as AWAITING_HUMAN; emitting budget.exceeded here would wrongly
+    flip the live UI to the budget banner over the checkpoint panel.
+    """
+    session = await _make_session(db_session, hitl_mode="every_branch")
+    session.config["budget_usd"] = 0.001  # tiny: the branch's calls would blow it
+    llm = FakeLLMClient(
+        completions=[json.dumps(o) for o in _PAUSE_RUN_SCRIPT],
+        chunks=["unused"],
+        cost_per_call=0.01,
+    )
+    rec = _Recorder()
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
+
+    await engine.run()
+
+    assert session.status == "awaiting_human"
+    assert rec.count(CHECKPOINT_REACHED) == 1
+    assert rec.count(BUDGET_EXCEEDED) == 0
+
+
 async def test_autopilot_mode_unaffected_by_hitl_feature(db_session: AsyncSession) -> None:
     """Regression guard: autopilot must remain byte-for-byte unchanged."""
     session = await _make_session(db_session, hitl_mode="autopilot")
