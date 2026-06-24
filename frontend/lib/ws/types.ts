@@ -17,6 +17,7 @@ export type GraphNode = {
   status: "pending" | "active" | "pruned" | "kept" | "expanded";
   score?: number;
   critique?: string;
+  dimensions?: Record<string, number>;
 };
 
 export type EngineStatus =
@@ -28,10 +29,23 @@ export type EngineStatus =
   | "error"
   | "paused";
 
+export type CheckpointCandidate = {
+  id: string;
+  title: string;
+  content: string;
+  score: number;
+  critique: string;
+  dimensions: Record<string, number>;
+};
+
 export type Checkpoint = {
   checkpoint_id: string;
   kind: string;
-  payload: { prune: string[]; keep: string[]; expand: string[] };
+  payload: {
+    proposed_keep: string[];
+    proposed_prune: string[];
+    candidates: CheckpointCandidate[];
+  };
 };
 
 export type GraphState = {

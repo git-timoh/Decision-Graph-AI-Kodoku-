@@ -60,7 +60,13 @@ export function NewSessionDialog() {
       const { session_id } = await api.createSession({
         goal,
         title: title.trim() ? title.trim() : null,
-        config: { model, branching_factor: 3, max_depth: 3, temperature: 0.7 },
+        config: {
+          model,
+          branching_factor: 3,
+          max_depth: 3,
+          temperature: 0.7,
+          hitl_mode: "autopilot",
+        },
       });
       refreshSidebar();
       setOpen(false);

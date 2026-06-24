@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Graph } from "@/components/graph/Graph";
+import { CheckpointPanel } from "@/components/panels/CheckpointPanel";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 import { connectSession } from "@/lib/ws/client";
@@ -37,6 +38,7 @@ function seedNodes(nodes: NodeDTO[], evaluations: EvaluationDTO[]): GraphNode[] 
       status: n.status as GraphNode["status"],
       score: ev ? Number(ev.score) : undefined,
       critique: ev?.critique,
+      dimensions: ev?.dimensions as Record<string, number> | undefined,
     };
   });
 }
@@ -61,6 +63,7 @@ export function SessionGraphView({
   const setConnected = useSessionStore((s) => s.setConnected);
   const status = useSessionStore((s) => s.graph.status);
   const synthesis = useSessionStore((s) => s.graph.synthesis);
+  const checkpoint = useSessionStore((s) => s.graph.checkpoint);
   const connected = useSessionStore((s) => s.connected);
   const [emitting, setEmitting] = useState(false);
   const [running, setRunning] = useState(false);
@@ -155,8 +158,11 @@ export function SessionGraphView({
         </div>
       </div>
 
-      <div className="relative flex-1">
+      <div className="relative flex-1 overflow-hidden">
         <Graph />
+        {status === "awaiting_human" && checkpoint && (
+          <CheckpointPanel sessionId={sessionId} checkpoint={checkpoint} />
+        )}
       </div>
 
       {synthesis && (
