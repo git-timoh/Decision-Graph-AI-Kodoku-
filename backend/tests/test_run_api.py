@@ -168,3 +168,157 @@ async def test_interrupt_returns_202_with_bool(client: AsyncClient) -> None:
     assert response.status_code == 202
     body = response.json()
     assert isinstance(body["interrupted"], bool)
+
+
+# --- /resume ----------------------------------------------------------------
+# branching_factor=2, max_depth=1: expand root -> 2 candidates (A, B), both
+# evaluated. every_branch pauses for human review instead of deciding. After
+# resume keeps one (A) and prunes the other (B), depth(1) is not < max_depth(1)
+# so the frontier is empty post-resume -> straight to synthesis -> DONE.
+_PAUSE_EXPAND_JSON = {
+    "candidates": [
+        {"title": "Idea A", "content": "Idea A content"},
+        {"title": "Idea B", "content": "Idea B content"},
+    ]
+}
+_EVAL_A_JSON = {"score": 8.0, "critique": "Strong.", "dimensions": {"feasibility": 8}}
+_EVAL_B_JSON = {"score": 3.0, "critique": "Weak.", "dimensions": {"feasibility": 3}}
+
+
+def _make_pause_client() -> FakeLLMClient:
+    fake = FakeLLMClient.from_json([_PAUSE_EXPAND_JSON, _EVAL_A_JSON, _EVAL_B_JSON])
+    fake.chunks = list(_SYNTH_CHUNKS)
+    return fake
+
+
+@pytest_asyncio.fixture
+async def hitl_client(
+    db_engine: AsyncEngine,
+    truncate_all: None,
+) -> AsyncIterator[AsyncClient]:
+    """Like `client`, but the fake LLM is scripted for the every_branch pause
+    script above (2 candidates, then a synthesis stream after resume)."""
+    sessionmaker = async_sessionmaker(bind=db_engine, expire_on_commit=False)
+
+    async def _override_db() -> AsyncIterator[AsyncSession]:
+        async with sessionmaker() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    def _override_role_clients_builder() -> RoleClientsBuilder:
+        async def _build(_s: AsyncSession) -> RoleClients:
+            fake = _make_pause_client()
+            return RoleClients(expand=fake, evaluate=fake, synthesize=fake)
+
+        return _build
+
+    app = create_app()
+    app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_role_clients_builder] = _override_role_clients_builder
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+
+async def _make_hitl_session(client: AsyncClient) -> str:
+    created = (await client.post(
+        "/sessions",
+        json={
+            "goal": "Brainstorm side-project ideas combining AI and music.",
+            "config": {"branching_factor": 2, "max_depth": 1, "hitl_mode": "every_branch"},
+        },
+    )).json()
+    return created["session_id"]
+
+
+async def _run_to_checkpoint(client: AsyncClient, sid: str) -> dict:
+    response = await client.post(f"/sessions/{sid}/run")
+    assert response.status_code == 202
+    await runner.join(UUID(sid))
+
+    detail = (await client.get(f"/sessions/{sid}")).json()
+    assert detail["status"] == "awaiting_human"
+    checkpoints = detail["checkpoints"]
+    assert len(checkpoints) == 1
+    assert checkpoints[0]["resolved_at"] is None
+    return checkpoints[0]
+
+
+@pytest.mark.asyncio
+async def test_resume_full_cycle_applies_decision_and_continues(
+    hitl_client: AsyncClient,
+) -> None:
+    sid = await _make_hitl_session(hitl_client)
+    checkpoint = await _run_to_checkpoint(hitl_client, sid)
+    candidates = checkpoint["payload"]["candidates"]
+    by_title = {c["title"]: c["id"] for c in candidates}
+    keep_id = by_title["Idea A"]
+    prune_id = by_title["Idea B"]
+
+    response = await hitl_client.post(
+        f"/sessions/{sid}/resume",
+        json={
+            "checkpoint_id": checkpoint["id"],
+            "keep": [keep_id],
+            "prune": [prune_id],
+            "edits": {keep_id: {"title": "Idea A (edited)"}},
+        },
+    )
+    assert response.status_code == 202
+
+    await runner.join(UUID(sid))
+
+    detail = (await hitl_client.get(f"/sessions/{sid}")).json()
+    nodes_by_id = {n["id"]: n for n in detail["nodes"]}
+    assert nodes_by_id[keep_id]["status"] == "kept"
+    assert nodes_by_id[keep_id]["title"] == "Idea A (edited)"
+    assert nodes_by_id[prune_id]["status"] == "pruned"
+    assert nodes_by_id[prune_id]["title"] == "Idea B"
+
+    resolved_checkpoint = next(
+        c for c in detail["checkpoints"] if c["id"] == checkpoint["id"]
+    )
+    assert resolved_checkpoint["resolved_at"] is not None
+    assert resolved_checkpoint["decision"]["keep"] == [keep_id]
+    assert resolved_checkpoint["decision"]["prune"] == [prune_id]
+
+    # Empty frontier post-resume (max_depth=1) -> straight to synthesis -> DONE.
+    assert detail["status"] == "done"
+
+    replay = (await hitl_client.get(f"/sessions/{sid}/events")).json()
+    types = [e["type"] for e in replay]
+    assert "checkpoint.reached" in types
+    assert "checkpoint.resolved" in types
+    reached_idx = types.index("checkpoint.reached")
+    resolved_idx = types.index("checkpoint.resolved")
+    assert reached_idx < resolved_idx
+    assert types[-1] == "session.done"
+
+
+@pytest.mark.asyncio
+async def test_resume_with_wrong_checkpoint_id_returns_409(hitl_client: AsyncClient) -> None:
+    sid = await _make_hitl_session(hitl_client)
+    checkpoint = await _run_to_checkpoint(hitl_client, sid)
+    candidates = checkpoint["payload"]["candidates"]
+    keep_id = candidates[0]["id"]
+
+    response = await hitl_client.post(
+        f"/sessions/{sid}/resume",
+        json={"checkpoint_id": str(uuid4()), "keep": [keep_id], "prune": []},
+    )
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_resume_when_not_awaiting_human_returns_409(hitl_client: AsyncClient) -> None:
+    sid = await _make_hitl_session(hitl_client)
+
+    response = await hitl_client.post(
+        f"/sessions/{sid}/resume",
+        json={"checkpoint_id": str(uuid4()), "keep": [], "prune": []},
+    )
+    assert response.status_code == 409

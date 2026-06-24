@@ -53,6 +53,30 @@ class SessionUpdate(BaseModel):
     config: SessionConfig | None = None
 
 
+class NodeEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = None
+    content: str | None = None
+
+
+class ResumeRequest(BaseModel):
+    """Body of `POST /sessions/{id}/resume`.
+
+    `keep ∪ prune` must be a subset of the resolved checkpoint's candidate
+    node ids — that check happens in the endpoint, where the checkpoint (and
+    therefore its candidate ids) is loaded; the DTO has no DB access so it
+    can't validate it itself.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    checkpoint_id: UUID
+    keep: list[UUID] = Field(default_factory=list)
+    prune: list[UUID] = Field(default_factory=list)
+    edits: dict[UUID, NodeEdit] = Field(default_factory=dict)
+
+
 class _ORM(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
