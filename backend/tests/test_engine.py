@@ -13,9 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kodoku.api.dtos import SessionConfig, SessionCreate
 from kodoku.db.models import Checkpoint, Evaluation, Node
 from kodoku.db.models import Session as SessionModel
-from kodoku.domain.enums import CheckpointKind, NodeKind, NodeStatus
+from kodoku.domain.enums import CheckpointKind, NodeKind, NodeStatus, SessionStatus
 from kodoku.engine.events import (
+    BUDGET_EXCEEDED,
     CHECKPOINT_REACHED,
+    COST_UPDATED,
     DECIDE_COMPLETED,
     EVALUATION_COMPLETED,
     NODE_CREATED,
@@ -244,6 +246,7 @@ class _ScoreByTitleClient:
     """
 
     model = "score-by-title"
+    cost_usd = 0.0
 
     def __init__(self, expand_obj: dict[str, Any], chunks: list[str]) -> None:
         self._expand = json.dumps(expand_obj)
@@ -479,3 +482,80 @@ async def test_threshold_mode_unchanged_and_emits_decide_completed(
     payload = next(p for t, p in rec.events if t == DECIDE_COMPLETED)
     assert payload["source"] == "threshold"
     assert payload["rationale"] == ""
+
+
+async def test_cost_updated_emitted_per_branch(db_session: AsyncSession) -> None:
+    session = await _make_session(db_session, branching_factor=2, max_depth=1)
+    rec = _Recorder()
+    llm = FakeLLMClient(
+        completions=[json.dumps(_expand("A", "B")), json.dumps(_eval(8.0)),
+                     json.dumps(_eval(3.0))],
+        chunks=["done"],
+        cost_per_call=0.01,
+    )
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
+    await engine.run()
+
+    assert rec.count(COST_UPDATED) >= 1
+    payload = next(p for t, p in rec.events if t == COST_UPDATED)
+    assert payload["cost_usd"] > 0.0
+    assert payload["budget_usd"] is None
+    assert float(session.cost_usd) > 0.0
+
+
+async def test_budget_exceeded_stops_before_synthesis(db_session: AsyncSession) -> None:
+    # branching_factor=2, max_depth=2 so there is a second branch the stop prevents.
+    session = await _make_session(db_session, branching_factor=2, max_depth=2)
+    session.config["budget_usd"] = 0.001  # tiny: first branch's calls blow it
+    rec = _Recorder()
+    llm = FakeLLMClient(
+        completions=[json.dumps(_expand("A", "B")), json.dumps(_eval(8.0)),
+                     json.dumps(_eval(3.0)),
+                     json.dumps(_expand("C", "D")), json.dumps(_eval(7.0)),
+                     json.dumps(_eval(2.0))],
+        chunks=["done"],
+        cost_per_call=0.01,
+    )
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
+    await engine.run()
+
+    assert rec.count(BUDGET_EXCEEDED) == 1
+    assert session.status == SessionStatus.PAUSED.value
+    # Synthesis never ran: no synthesis node, no SESSION_DONE.
+    assert rec.count("session.done") == 0
+
+
+async def test_no_budget_runs_to_completion(db_session: AsyncSession) -> None:
+    session = await _make_session(db_session, branching_factor=2, max_depth=1)
+    # default budget_usd is None
+    rec = _Recorder()
+    llm = FakeLLMClient(
+        completions=[json.dumps(_expand("A", "B")), json.dumps(_eval(8.0)),
+                     json.dumps(_eval(3.0))],
+        chunks=["done"],
+        cost_per_call=0.01,
+    )
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
+    await engine.run()
+
+    assert rec.count(BUDGET_EXCEEDED) == 0
+    assert session.status == SessionStatus.DONE.value
+
+
+async def test_cost_base_seeds_from_existing(db_session: AsyncSession) -> None:
+    from decimal import Decimal
+    session = await _make_session(db_session, branching_factor=2, max_depth=1)
+    session.cost_usd = Decimal("0.50")  # prior spend from an earlier run segment
+    await db_session.flush()
+    rec = _Recorder()
+    llm = FakeLLMClient(
+        completions=[json.dumps(_expand("A", "B")), json.dumps(_eval(8.0)),
+                     json.dumps(_eval(3.0))],
+        chunks=["done"],
+        cost_per_call=0.01,
+    )
+    engine = DecisionEngine(db_session, session, _roles(llm), rec)
+    await engine.run()
+
+    # New cost adds on top of the 0.50 base, never resets below it.
+    assert float(session.cost_usd) > 0.50
