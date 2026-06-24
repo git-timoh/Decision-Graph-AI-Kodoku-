@@ -25,6 +25,11 @@ type SessionStore = {
   ) => void;
   applyEvent: (event: WsEvent) => void;
   setConnected: (connected: boolean) => void;
+
+  /** Node currently shown in the NodeDrawer, if any. */
+  selectedNodeId: string | null;
+  selectNode: (id: string) => void;
+  clearSelection: () => void;
 };
 
 export const useSessionStore = create<SessionStore>((set) => ({
@@ -44,4 +49,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
     })),
   applyEvent: (event) => set((state) => ({ graph: reduce(state.graph, event) })),
   setConnected: (connected) => set({ connected }),
+
+  selectedNodeId: null,
+  selectNode: (id) => set({ selectedNodeId: id }),
+  clearSelection: () => set({ selectedNodeId: null }),
 }));

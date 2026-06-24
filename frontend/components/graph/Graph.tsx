@@ -18,6 +18,7 @@ const nodeTypes = { card: NodeCard };
 
 export function Graph() {
   const graphNodes = useSessionStore((s) => s.graph.nodes);
+  const selectNode = useSessionStore((s) => s.selectNode);
 
   const { nodes, edges } = useMemo(() => {
     const list = Object.values(graphNodes);
@@ -53,6 +54,7 @@ export function Graph() {
       nodeTypes={nodeTypes}
       fitView
       proOptions={{ hideAttribution: true }}
+      onNodeClick={(_, node) => selectNode(node.id)}
     >
       <Background />
       <Controls />

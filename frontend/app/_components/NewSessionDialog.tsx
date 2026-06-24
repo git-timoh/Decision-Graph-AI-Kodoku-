@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api/client";
+import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/state/sessionStore";
 
 const MODEL_PRESETS = [
@@ -31,6 +32,21 @@ const MODEL_PRESETS = [
   { value: "openai/gpt-4o-mini", label: "OpenAI GPT-4o mini" },
   { value: "openrouter/anthropic/claude-3.5-sonnet", label: "OpenRouter Claude 3.5 Sonnet" },
   { value: "ollama/llama3.1", label: "Ollama (local dev)" },
+];
+
+type HitlMode = "autopilot" | "every_branch";
+
+const HITL_OPTIONS: { value: HitlMode; label: string; description: string }[] = [
+  {
+    value: "autopilot",
+    label: "Autopilot",
+    description: "Engine prunes and keeps candidates on its own.",
+  },
+  {
+    value: "every_branch",
+    label: "Review each branch",
+    description: "Pause for your approval before every branch continues.",
+  },
 ];
 
 export function NewSessionDialog() {
@@ -41,6 +57,7 @@ export function NewSessionDialog() {
   const [goal, setGoal] = useState("");
   const [title, setTitle] = useState("");
   const [model, setModel] = useState(MODEL_PRESETS[0].value);
+  const [hitlMode, setHitlMode] = useState<HitlMode>("autopilot");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +65,7 @@ export function NewSessionDialog() {
     setGoal("");
     setTitle("");
     setModel(MODEL_PRESETS[0].value);
+    setHitlMode("autopilot");
     setError(null);
     setSubmitting(false);
   }
@@ -65,7 +83,7 @@ export function NewSessionDialog() {
           branching_factor: 3,
           max_depth: 3,
           temperature: 0.7,
-          hitl_mode: "autopilot",
+          hitl_mode: hitlMode,
         },
       });
       refreshSidebar();
@@ -144,6 +162,31 @@ export function NewSessionDialog() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Human review</Label>
+            <div className="inline-flex w-full rounded-md border border-input p-0.5">
+              {HITL_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setHitlMode(option.value)}
+                  aria-pressed={hitlMode === option.value}
+                  className={cn(
+                    "flex-1 rounded-[5px] px-2.5 py-1.5 text-sm font-medium transition-colors",
+                    hitlMode === option.value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {HITL_OPTIONS.find((option) => option.value === hitlMode)?.description}
+            </p>
           </div>
 
           {error && (
