@@ -98,13 +98,19 @@ export function NewSessionDialog() {
     setSubmitting(true);
     setError(null);
     try {
+      // Fill holes (a user may set branch 2 without branch 1) so the payload
+      // is dense strings, not a sparse array that serializes nulls.
+      const filledBranchModels = Array.from(
+        { length: BRANCH_SLOTS },
+        (_, i) => branchModels[i] ?? "",
+      );
       const { session_id } = await api.createSession({
         goal,
         title: title.trim() ? title.trim() : null,
         config: {
           model,
           branching_factor: 3,
-          branch_models: branchModels.some((m) => m !== "") ? branchModels : null,
+          branch_models: filledBranchModels.some((m) => m !== "") ? filledBranchModels : null,
           max_depth: 3,
           temperature: 0.7,
           hitl_mode: hitlMode,
