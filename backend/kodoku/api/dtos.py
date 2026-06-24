@@ -108,6 +108,7 @@ class NodeDTO(_ORM):
     title: str
     content: str
     status: NodeStatus
+    model: str | None
     created_at: datetime
 
 

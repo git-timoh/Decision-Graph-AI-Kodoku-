@@ -18,6 +18,7 @@ export type GraphNode = {
   score?: number;
   critique?: string;
   dimensions?: Record<string, number>;
+  model?: string | null;
 };
 
 export type EngineStatus =

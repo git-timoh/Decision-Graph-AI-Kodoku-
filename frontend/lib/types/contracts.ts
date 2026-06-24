@@ -298,6 +298,8 @@ export interface components {
             /** Content */
             content: string;
             status: components["schemas"]["NodeStatus"];
+            /** Model */
+            model: string | null;
             /**
              * Created At
              * Format: date-time

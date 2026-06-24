@@ -113,6 +113,7 @@ def test_session_detail_response_bundles_nested() -> None:
                 "title": "Root",
                 "content": "goal goal goal goal goal",
                 "status": "active",
+                "model": None,
                 "created_at": now,
             }
         ],

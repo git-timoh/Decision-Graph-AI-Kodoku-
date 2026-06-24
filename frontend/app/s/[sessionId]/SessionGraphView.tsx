@@ -40,6 +40,7 @@ function seedNodes(nodes: NodeDTO[], evaluations: EvaluationDTO[]): GraphNode[] 
       score: ev ? Number(ev.score) : undefined,
       critique: ev?.critique,
       dimensions: ev?.dimensions as Record<string, number> | undefined,
+      model: n.model ?? null,
     };
   });
 }

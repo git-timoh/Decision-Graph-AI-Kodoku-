@@ -111,6 +111,11 @@ export function NodeDrawer() {
                 Score {node.score.toFixed(1)}
               </span>
             )}
+            {node.model && (
+              <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium">
+                {node.model}
+              </span>
+            )}
           </div>
 
           <h3 className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">

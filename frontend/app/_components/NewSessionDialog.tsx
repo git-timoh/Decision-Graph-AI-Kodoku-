@@ -34,6 +34,8 @@ const MODEL_PRESETS = [
   { value: "ollama/llama3.1", label: "Ollama (local dev)" },
 ];
 
+const BRANCH_SLOTS = 3;
+
 type HitlMode = "autopilot" | "every_branch";
 
 const HITL_OPTIONS: { value: HitlMode; label: string; description: string }[] = [
@@ -72,6 +74,7 @@ export function NewSessionDialog() {
   const [goal, setGoal] = useState("");
   const [title, setTitle] = useState("");
   const [model, setModel] = useState(MODEL_PRESETS[0].value);
+  const [branchModels, setBranchModels] = useState<string[]>([]);
   const [hitlMode, setHitlMode] = useState<HitlMode>("autopilot");
   const [decideMode, setDecideMode] = useState<DecideMode>("threshold");
   const [budget, setBudget] = useState<string>("");
@@ -82,6 +85,7 @@ export function NewSessionDialog() {
     setGoal("");
     setTitle("");
     setModel(MODEL_PRESETS[0].value);
+    setBranchModels([]);
     setHitlMode("autopilot");
     setDecideMode("threshold");
     setBudget("");
@@ -100,6 +104,7 @@ export function NewSessionDialog() {
         config: {
           model,
           branching_factor: 3,
+          branch_models: branchModels.some((m) => m !== "") ? branchModels : null,
           max_depth: 3,
           temperature: 0.7,
           hitl_mode: hitlMode,
@@ -183,6 +188,29 @@ export function NewSessionDialog() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Per-branch models (optional)</Label>
+            {Array.from({ length: BRANCH_SLOTS }).map((_, i) => (
+              <select
+                key={i}
+                value={branchModels[i] ?? ""}
+                onChange={(e) => {
+                  const next = [...branchModels];
+                  next[i] = e.target.value;
+                  setBranchModels(next);
+                }}
+                className="w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-sm"
+              >
+                <option value="">{`Branch ${i + 1}: session default`}</option>
+                {MODEL_PRESETS.map((preset) => (
+                  <option key={preset.value} value={preset.value}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            ))}
           </div>
 
           <div className="space-y-2">
