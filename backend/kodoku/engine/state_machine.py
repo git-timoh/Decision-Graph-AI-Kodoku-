@@ -33,6 +33,7 @@ from kodoku.engine.events import (
     SYNTHESIS_STREAMING,
     Emitter,
 )
+from kodoku.engine.frontier import rebuild_frontier
 from kodoku.engine.steps.decide import decide
 from kodoku.engine.steps.evaluate import EvaluationResult, evaluate
 from kodoku.engine.steps.expand import expand
@@ -84,8 +85,7 @@ class DecisionEngine:
         await self.emit(SESSION_STARTED, {})
         await self._state_changed("root", "expanding")
 
-        root = await self._root_node()
-        self._frontier.append(root.id)
+        self._frontier = await rebuild_frontier(self.db, self.session)
         await self.db.flush()
 
         # 2. Frontier BFS.
@@ -224,13 +224,6 @@ class DecisionEngine:
 
     async def _state_changed(self, from_: str, to: str) -> None:
         await self.emit(ENGINE_STATE_CHANGED, {"from": from_, "to": to})
-
-    async def _root_node(self) -> Node:
-        stmt = select(Node).where(
-            Node.session_id == self.session.id,
-            Node.kind == NodeKind.ROOT.value,
-        )
-        return (await self.db.execute(stmt)).scalar_one()
 
     async def _node(self, node_id: UUID) -> Node:
         stmt = select(Node).where(Node.id == node_id)
