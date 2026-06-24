@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from typing import cast
 
 import litellm
+from litellm import completion_cost
 from litellm.litellm_core_utils.streaming_handler import CustomStreamWrapper
 from litellm.types.utils import ModelResponse
 
@@ -27,6 +28,7 @@ class LiteLLMClient:
         self.temperature = temperature
         self.api_key = api_key
         self.api_base = api_base
+        self.cost_usd = 0.0
 
     async def complete(self, *, system: str, prompt: str, json_object: bool = False) -> str:
         response = await litellm.acompletion(
@@ -41,6 +43,12 @@ class LiteLLMClient:
             api_base=self.api_base,
         )
         result = cast(ModelResponse, response)
+        # ponytail: best-effort — completion_cost raises for models it has no
+        # pricing for; a costless call must never break completion.
+        try:
+            self.cost_usd += completion_cost(completion_response=result)
+        except Exception:  # noqa: BLE001
+            pass
         return result.choices[0].message.content or ""
 
     async def stream(self, *, system: str, prompt: str) -> AsyncIterator[str]:
@@ -52,6 +60,7 @@ class LiteLLMClient:
             ],
             temperature=self.temperature,
             stream=True,
+            stream_options={"include_usage": True},
             api_key=self.api_key,
             api_base=self.api_base,
         )
@@ -60,3 +69,13 @@ class LiteLLMClient:
             content = chunk.choices[0].delta.content
             if content:
                 yield content
+            usage = getattr(chunk, "usage", None)
+            if usage is not None:
+                # ponytail: best-effort streaming cost; providers that omit
+                # usage in the final chunk leave synthesis cost at 0.
+                try:
+                    self.cost_usd += completion_cost(
+                        completion_response=chunk, model=self.model
+                    )
+                except Exception:  # noqa: BLE001
+                    pass

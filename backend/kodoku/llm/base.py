@@ -13,10 +13,12 @@ class LLMClient(Protocol):
     when `json_object=True`. `stream` is a *sync* method that returns an
     `AsyncIterator[str]`, so callers write `async for chunk in llm.stream(...)`.
     `model` is the model string this client is bound to (e.g. recorded on
-    `Evaluation` rows).
+    `Evaluation` rows). `cost_usd` is the cumulative USD cost of this client's
+    calls (best-effort; 0.0 if the provider/model has no cost data).
     """
 
     model: str
+    cost_usd: float
 
     async def complete(self, *, system: str, prompt: str, json_object: bool = False) -> str: ...
 
