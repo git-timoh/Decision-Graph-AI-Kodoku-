@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from kodoku.domain.enums import (
     CheckpointKind,
@@ -29,6 +29,7 @@ class SessionConfig(BaseModel):
     hitl_mode: Literal["autopilot", "every_branch"] = "autopilot"
     decide_mode: Literal["threshold", "judge"] = "threshold"
     budget_usd: float | None = Field(default=None, ge=0)
+    branch_models: list[str] | None = Field(default=None)
 
     @field_validator("model")
     @classmethod
@@ -38,6 +39,21 @@ class SessionConfig(BaseModel):
                 "model must be a LiteLLM-style identifier (e.g. 'anthropic/claude-sonnet-4-6')"
             )
         return value
+
+    @model_validator(mode="after")
+    def _validate_branch_models(self) -> SessionConfig:
+        if self.branch_models is None:
+            return self
+        if len(self.branch_models) > self.branching_factor:
+            raise ValueError("branch_models cannot have more entries than branching_factor")
+        for entry in self.branch_models:
+            if entry == "":
+                continue
+            if " " in entry or not _MODEL_RE.match(entry):
+                raise ValueError(
+                    f"branch_models entry {entry!r} must be a LiteLLM-style identifier or ''"
+                )
+        return self
 
 
 class SessionCreate(BaseModel):

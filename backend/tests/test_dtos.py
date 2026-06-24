@@ -135,3 +135,25 @@ def test_session_list_item_omits_heavy_fields() -> None:
         "created_at",
         "updated_at",
     }
+
+
+def test_branch_models_defaults_none() -> None:
+    assert SessionConfig().branch_models is None
+
+
+def test_branch_models_valid_list() -> None:
+    cfg = SessionConfig(
+        branching_factor=3,
+        branch_models=["deepseek/deepseek-chat", "", "openai/gpt-4o"],
+    )
+    assert cfg.branch_models == ["deepseek/deepseek-chat", "", "openai/gpt-4o"]
+
+
+def test_branch_models_too_many_rejected() -> None:
+    with pytest.raises(ValueError, match="branch_models"):
+        SessionConfig(branching_factor=1, branch_models=["a/b", "c/d"])
+
+
+def test_branch_models_bad_id_rejected() -> None:
+    with pytest.raises(ValueError, match="branch_models"):
+        SessionConfig(branching_factor=2, branch_models=["not a model"])
