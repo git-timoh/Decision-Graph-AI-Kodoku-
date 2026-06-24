@@ -1,5 +1,6 @@
 import type {
   HealthResponse,
+  ResumeRequest,
   SessionCreate,
   SessionCreateResponse,
   SessionDetailResponse,
@@ -86,6 +87,12 @@ export const api = {
   interruptSession: (id: string) =>
     request<void>(`/sessions/${id}/interrupt`, {
       method: "POST",
+    }),
+
+  resumeSession: (id: string, body: ResumeRequest) =>
+    request<void>(`/sessions/${id}/resume`, {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
 
   getSettings: () => request<SettingsResponse>("/settings"),

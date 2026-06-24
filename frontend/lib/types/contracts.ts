@@ -115,6 +115,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions/{session_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Run */
+        post: operations["resume_run_sessions__session_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions/{session_id}/interrupt": {
         parameters: {
             query?: never;
@@ -287,6 +304,13 @@ export interface components {
              */
             created_at: string;
         };
+        /** NodeEdit */
+        NodeEdit: {
+            /** Title */
+            title?: string | null;
+            /** Content */
+            content?: string | null;
+        };
         /**
          * NodeKind
          * @enum {string}
@@ -303,6 +327,35 @@ export interface components {
             set: boolean;
             /** Hint */
             hint?: string | null;
+        };
+        /**
+         * ResumeRequest
+         * @description Body of `POST /sessions/{id}/resume`.
+         *
+         *     `keep ∪ prune` must be a subset of the resolved checkpoint's candidate
+         *     node ids — that check happens in the endpoint, where the checkpoint (and
+         *     therefore its candidate ids) is loaded; the DTO has no DB access so it
+         *     can't validate it itself.
+         */
+        ResumeRequest: {
+            /**
+             * Checkpoint Id
+             * Format: uuid
+             */
+            checkpoint_id: string;
+            /** Keep */
+            keep?: string[];
+            /** Prune */
+            prune?: string[];
+            /** Edits */
+            edits?: {
+                [key: string]: components["schemas"]["NodeEdit"];
+            };
+        };
+        /** ResumeResponse */
+        ResumeResponse: {
+            /** Status */
+            status: string;
         };
         /** RunResponse */
         RunResponse: {
@@ -331,6 +384,12 @@ export interface components {
              * @default 0.7
              */
             temperature: number;
+            /**
+             * Hitl Mode
+             * @default autopilot
+             * @enum {string}
+             */
+            hitl_mode: "autopilot" | "every_branch";
         };
         /** SessionCreate */
         SessionCreate: {
@@ -773,6 +832,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_run_sessions__session_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeResponse"];
                 };
             };
             /** @description Validation Error */

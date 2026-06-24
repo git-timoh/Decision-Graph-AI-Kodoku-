@@ -18,10 +18,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kodoku.api.dtos import SessionConfig
-from kodoku.db.models import Evaluation, Node
+from kodoku.db.models import Checkpoint, Evaluation, Node
 from kodoku.db.models import Session as SessionModel
-from kodoku.domain.enums import NodeKind, NodeStatus, SessionStatus
+from kodoku.domain.enums import CheckpointKind, NodeKind, NodeStatus, SessionStatus
 from kodoku.engine.events import (
+    CHECKPOINT_REACHED,
     ENGINE_STATE_CHANGED,
     EVALUATION_COMPLETED,
     NODE_CREATED,
@@ -33,7 +34,8 @@ from kodoku.engine.events import (
     SYNTHESIS_STREAMING,
     Emitter,
 )
-from kodoku.engine.steps.decide import decide
+from kodoku.engine.frontier import rebuild_frontier
+from kodoku.engine.steps.decide import Decision, decide
 from kodoku.engine.steps.evaluate import EvaluationResult, evaluate
 from kodoku.engine.steps.expand import expand
 from kodoku.engine.steps.synthesize import synthesize
@@ -61,6 +63,7 @@ class DecisionEngine:
         self.should_stop = should_stop
         self.config = SessionConfig(**session.config)
         self._frontier: deque[UUID] = deque()
+        self._paused = False
 
     async def run(self) -> None:
         try:
@@ -84,13 +87,17 @@ class DecisionEngine:
         await self.emit(SESSION_STARTED, {})
         await self._state_changed("root", "expanding")
 
-        root = await self._root_node()
-        self._frontier.append(root.id)
+        self._frontier = await rebuild_frontier(self.db, self.session)
         await self.db.flush()
 
         # 2. Frontier BFS.
-        while self._frontier and not self.should_stop():
+        while self._frontier and not self.should_stop() and not self._paused:
             await self._expand_one(self._frontier.popleft())
+
+        # 2b. Paused for human review at a checkpoint — stop before synthesis.
+        # Status/current_step were already set to AWAITING_HUMAN by the pause.
+        if self._paused:
+            return
 
         # 3. Cooperative stop.
         if self.should_stop():
@@ -192,6 +199,11 @@ class DecisionEngine:
         decision = decide(
             scored, depth=parent.depth + 1, max_depth=self.config.max_depth
         )
+
+        if self.config.hitl_mode == "every_branch":
+            await self._pause_for_checkpoint(parent, children, results, decision)
+            return
+
         kept = set(decision.keep)
         for child in children:
             status = NodeStatus.KEPT if child.id in kept else NodeStatus.PRUNED
@@ -200,6 +212,63 @@ class DecisionEngine:
         await self.db.flush()
 
         self._frontier.extend(decision.expand)
+
+    async def _pause_for_checkpoint(
+        self,
+        parent: Node,
+        children: list[Node],
+        results: list[EvaluationResult],
+        decision: Decision,
+    ) -> None:
+        """Persist a POST_EVALUATE checkpoint and stop the run for human review.
+
+        Mirrors the kept/pruned classification `decide()` computed, but does not
+        apply it: the parent is marked EXPANDED (so a future frontier rebuild
+        won't re-expand it), while the candidate children stay ACTIVE pending
+        resolution. The frontier is not extended and synthesis does not run.
+        """
+        keep_set = set(decision.keep)
+        candidates = [
+            {
+                "id": str(child.id),
+                "title": child.title,
+                "content": child.content,
+                "score": ev.score,
+                "critique": ev.critique,
+                "dimensions": ev.dimensions,
+            }
+            for child, ev in zip(children, results, strict=True)
+        ]
+        payload = {
+            "proposed_keep": [str(cid) for cid in decision.keep],
+            "proposed_prune": [str(child.id) for child in children if child.id not in keep_set],
+            "candidates": candidates,
+        }
+
+        checkpoint = Checkpoint(
+            session_id=self.session.id,
+            kind=CheckpointKind.POST_EVALUATE.value,
+            payload=payload,
+            decision=None,
+            resolved_at=None,
+        )
+        self.db.add(checkpoint)
+        await self.db.flush()
+
+        await self.emit(
+            CHECKPOINT_REACHED,
+            {
+                "checkpoint_id": str(checkpoint.id),
+                "kind": checkpoint.kind,
+                "payload": payload,
+            },
+        )
+
+        await self._mark(parent, NodeStatus.EXPANDED)
+        self.session.status = SessionStatus.AWAITING_HUMAN.value
+        self.session.current_step = None
+        await self.db.flush()
+        self._paused = True
 
     async def _synthesize(self) -> None:
         self.session.current_step = "synthesizing"
@@ -224,13 +293,6 @@ class DecisionEngine:
 
     async def _state_changed(self, from_: str, to: str) -> None:
         await self.emit(ENGINE_STATE_CHANGED, {"from": from_, "to": to})
-
-    async def _root_node(self) -> Node:
-        stmt = select(Node).where(
-            Node.session_id == self.session.id,
-            Node.kind == NodeKind.ROOT.value,
-        )
-        return (await self.db.execute(stmt)).scalar_one()
 
     async def _node(self, node_id: UUID) -> Node:
         stmt = select(Node).where(Node.id == node_id)

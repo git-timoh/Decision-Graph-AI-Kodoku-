@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { Graph } from "@/components/graph/Graph";
+import { CheckpointPanel } from "@/components/panels/CheckpointPanel";
+import { NodeDrawer } from "@/components/panels/NodeDrawer";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 import { connectSession } from "@/lib/ws/client";
@@ -37,6 +39,7 @@ function seedNodes(nodes: NodeDTO[], evaluations: EvaluationDTO[]): GraphNode[] 
       status: n.status as GraphNode["status"],
       score: ev ? Number(ev.score) : undefined,
       critique: ev?.critique,
+      dimensions: ev?.dimensions as Record<string, number> | undefined,
     };
   });
 }
@@ -61,11 +64,16 @@ export function SessionGraphView({
   const setConnected = useSessionStore((s) => s.setConnected);
   const status = useSessionStore((s) => s.graph.status);
   const synthesis = useSessionStore((s) => s.graph.synthesis);
+  const checkpoint = useSessionStore((s) => s.graph.checkpoint);
   const connected = useSessionStore((s) => s.connected);
+  const keptCount = useSessionStore(
+    (s) => Object.values(s.graph.nodes).filter((n) => n.status === "kept").length,
+  );
   const [emitting, setEmitting] = useState(false);
   const [running, setRunning] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   const canRun = status === "draft" || status === "paused" || status === "error";
+  const showResumeBanner = status === "paused" || status === "error";
 
   useEffect(() => {
     seedGraph(seedNodes(initialNodes, initialEvaluations), {
@@ -155,8 +163,35 @@ export function SessionGraphView({
         </div>
       </div>
 
-      <div className="relative flex-1">
+      {showResumeBanner && (
+        <div className="flex items-center gap-3 border-b border-border bg-amber-500/10 px-6 py-2.5">
+          <span className="text-sm text-amber-700">
+            {status === "paused"
+              ? `Resume from ${keptCount} kept node${keptCount === 1 ? "" : "s"}`
+              : "Retry after error"}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            onClick={runSession}
+            disabled={running}
+          >
+            {running
+              ? "Starting…"
+              : status === "paused"
+                ? "Resume"
+                : "Retry"}
+          </Button>
+        </div>
+      )}
+
+      <div className="relative flex-1 overflow-hidden">
         <Graph />
+        <NodeDrawer />
+        {status === "awaiting_human" && checkpoint && (
+          <CheckpointPanel sessionId={sessionId} checkpoint={checkpoint} />
+        )}
       </div>
 
       {synthesis && (

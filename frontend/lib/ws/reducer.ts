@@ -42,12 +42,13 @@ export function reduce(state: GraphState, event: WsEvent): GraphState {
       break;
     }
     case "evaluation.completed": {
-      const { node_id, score, critique } = event.payload as unknown as {
+      const { node_id, score, critique, dimensions } = event.payload as unknown as {
         node_id: string;
         score: number;
         critique: string;
+        dimensions: Record<string, number>;
       };
-      next = patchNode(state, node_id, { score, critique });
+      next = patchNode(state, node_id, { score, critique, dimensions });
       break;
     }
     case "checkpoint.reached":
