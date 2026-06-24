@@ -119,8 +119,14 @@ async def _apply_resume(session_id: UUID, body: ResumeRequest) -> None:
     """
     async with get_sessionmaker()() as s:
         emit = make_db_emitter(s, session_id)
-        checkpoint = await _latest_unresolved_checkpoint(s, session_id)
-        assert checkpoint is not None  # validated by the caller before scheduling
+        stmt = select(Checkpoint).where(
+            Checkpoint.id == body.checkpoint_id, Checkpoint.resolved_at.is_(None)
+        )
+        checkpoint = (await s.execute(stmt)).scalars().first()
+        if checkpoint is None:
+            # The endpoint already validated this before scheduling; this is
+            # defense-in-depth, not a user-facing path.
+            raise RuntimeError(f"no unresolved checkpoint {body.checkpoint_id} to resume")
 
         keep_set = {str(nid) for nid in body.keep}
         candidate_ids = [c["id"] for c in checkpoint.payload["candidates"]]
@@ -159,9 +165,14 @@ async def _apply_resume(session_id: UUID, body: ResumeRequest) -> None:
                      "content": node.content},
                 )
 
+        # Record the *applied* partition, not the raw request: per plan
+        # decision #5, `prune` may be partial or omitted — survivors are
+        # `keep`, everything else among the candidates is pruned. Deriving
+        # both lists from `candidate_ids` keeps the recorded decision in
+        # sync with the node statuses actually written above.
         decision = {
-            "keep": [str(nid) for nid in body.keep],
-            "prune": [str(nid) for nid in body.prune],
+            "keep": [cid for cid in candidate_ids if cid in keep_set],
+            "prune": [cid for cid in candidate_ids if cid not in keep_set],
             "edits": {str(nid): edit.model_dump() for nid, edit in body.edits.items()},
         }
         checkpoint.decision = decision

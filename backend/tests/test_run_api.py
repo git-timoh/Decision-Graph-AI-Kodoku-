@@ -300,6 +300,50 @@ async def test_resume_full_cycle_applies_decision_and_continues(
 
 
 @pytest.mark.asyncio
+async def test_resume_with_partial_prune_records_derived_decision(
+    hitl_client: AsyncClient,
+) -> None:
+    """Plan decision #5: survivors = keep, everything else among the
+    candidates is pruned by the engine — `prune` in the request may be
+    partial or omitted. The recorded `checkpoint.decision` must reflect the
+    *applied* partition (derived from `keep` vs. all candidates), not the
+    raw (possibly incomplete) `prune` list from the request."""
+    sid = await _make_hitl_session(hitl_client)
+    checkpoint = await _run_to_checkpoint(hitl_client, sid)
+    candidates = checkpoint["payload"]["candidates"]
+    by_title = {c["title"]: c["id"] for c in candidates}
+    keep_id = by_title["Idea A"]
+    prune_id = by_title["Idea B"]
+
+    # Omit `prune` entirely — the engine must still derive that Idea B is pruned.
+    response = await hitl_client.post(
+        f"/sessions/{sid}/resume",
+        json={
+            "checkpoint_id": checkpoint["id"],
+            "keep": [keep_id],
+            "prune": [],
+        },
+    )
+    assert response.status_code == 202
+
+    await runner.join(UUID(sid))
+
+    detail = (await hitl_client.get(f"/sessions/{sid}")).json()
+    nodes_by_id = {n["id"]: n for n in detail["nodes"]}
+    assert nodes_by_id[keep_id]["status"] == "kept"
+    assert nodes_by_id[prune_id]["status"] == "pruned"
+
+    resolved_checkpoint = next(
+        c for c in detail["checkpoints"] if c["id"] == checkpoint["id"]
+    )
+    assert resolved_checkpoint["resolved_at"] is not None
+    # The recorded decision must match the applied node statuses, not the
+    # (empty) `prune` value from the request body.
+    assert resolved_checkpoint["decision"]["keep"] == [keep_id]
+    assert resolved_checkpoint["decision"]["prune"] == [prune_id]
+
+
+@pytest.mark.asyncio
 async def test_resume_with_wrong_checkpoint_id_returns_409(hitl_client: AsyncClient) -> None:
     sid = await _make_hitl_session(hitl_client)
     checkpoint = await _run_to_checkpoint(hitl_client, sid)
