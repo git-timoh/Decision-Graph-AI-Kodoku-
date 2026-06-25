@@ -6,6 +6,33 @@
 **Status:** M2 (domain model + REST CRUD) complete. See `docs/superpowers/specs/2026-05-14-kodoku-mvp-design.md`
 for the full design spec and `docs/architecture.md` for milestone status.
 
+## Install & run (local app)
+
+Kodoku runs entirely on your machine: one process serves the UI and API, and it
+stores everything in a `kodoku.db` SQLite file. Bring your own model key via the
+in-app `/settings` page.
+
+**With pipx (needs Python 3.12+):**
+
+```bash
+# build the UI once, bundle it into the package, then install
+cd frontend && npm ci && npm run build && cd ..
+cp -r frontend/out backend/kodoku/_web   # Windows: xcopy /E /I frontend\out backend\kodoku\_web
+pipx install ./backend
+kodoku            # starts the server and opens http://localhost:8000
+```
+
+**With Docker (no Python/Node needed):**
+
+```bash
+docker build -t kodoku .
+docker run --rm -p 8000:8000 -v kodoku-data:/data kodoku
+# open http://localhost:8000
+```
+
+Both serve on one port; there is no separate frontend process. The two-process
+`next dev` + `uvicorn` flow below is only for development.
+
 ## Stack
 
 - **Frontend:** Next.js 14, TypeScript, Tailwind, Zustand, React Flow (M3+)
