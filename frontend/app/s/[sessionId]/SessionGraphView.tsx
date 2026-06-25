@@ -146,6 +146,16 @@ export function SessionGraphView({
           ${costUsd.toFixed(4)}
         </span>
         <div className="ml-auto flex items-center gap-2">
+          <Button asChild size="sm" variant="outline">
+            <a href={`${API_BASE}/sessions/${sessionId}/export?format=md`} download>
+              Export
+            </a>
+          </Button>
+          <Button asChild size="sm" variant="link">
+            <a href={`${API_BASE}/sessions/${sessionId}/export?format=json`} download>
+              json
+            </a>
+          </Button>
           <Button size="sm" variant="outline" onClick={emitDebug} disabled={emitting}>
             {emitting ? "Emitting…" : "Emit debug events"}
           </Button>
