@@ -1,5 +1,6 @@
 import { SessionSidebar } from "@/app/_components/SessionSidebar";
 import { NewSessionDialog } from "@/app/_components/NewSessionDialog";
+import { FirstRunNotice } from "@/app/_components/FirstRunNotice";
 
 export default function HomePage() {
   return (
@@ -15,6 +16,7 @@ export default function HomePage() {
           </div>
           <NewSessionDialog />
         </header>
+        <FirstRunNotice />
         <section className="flex flex-1 items-center justify-center">
           <div className="max-w-md text-center text-sm text-muted-foreground">
             Each session expands a goal into branches, scores them, and

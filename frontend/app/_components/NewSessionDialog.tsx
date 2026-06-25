@@ -24,15 +24,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api/client";
+import { MODEL_PRESETS } from "@/lib/models";
 import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/state/sessionStore";
-
-const MODEL_PRESETS = [
-  { value: "anthropic/claude-sonnet-4-6", label: "Claude Sonnet 4.6 (recommended)" },
-  { value: "openai/gpt-4o-mini", label: "OpenAI GPT-4o mini" },
-  { value: "openrouter/anthropic/claude-3.5-sonnet", label: "OpenRouter Claude 3.5 Sonnet" },
-  { value: "ollama/llama3.1", label: "Ollama (local dev)" },
-];
 
 const BRANCH_SLOTS = 3;
 
