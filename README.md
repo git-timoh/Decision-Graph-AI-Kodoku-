@@ -12,14 +12,12 @@ Kodoku runs entirely on your machine: one process serves the UI and API, and it
 stores everything in a `kodoku.db` SQLite file. Bring your own model key via the
 in-app `/settings` page.
 
-**With pipx (needs Python 3.12+):**
+**With pipx (needs Python 3.12+ and Node 20+ to build the UI):**
 
 ```bash
-# build the UI once, bundle it into the package, then install
-cd frontend && npm ci && npm run build && cd ..
-cp -r frontend/out backend/kodoku/_web   # Windows: xcopy /E /I frontend\out backend\kodoku\_web
+python scripts/build.py   # builds the UI and stages it into the package
 pipx install ./backend
-kodoku            # starts the server and opens http://localhost:8000
+kodoku                    # starts the server and opens http://localhost:8000
 ```
 
 **With Docker (no Python/Node needed):**

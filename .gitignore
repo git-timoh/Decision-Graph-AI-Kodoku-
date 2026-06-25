@@ -17,6 +17,7 @@ node_modules/
 .next/
 out/
 .turbo/
+backend/kodoku/_web/
 *.tsbuildinfo
 
 # Env / secrets
