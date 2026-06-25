@@ -7,7 +7,6 @@ upserted one row per key.
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kodoku.db.models import AppSetting
@@ -30,11 +29,8 @@ class SettingsRepository:
     async def upsert(self, items: dict[str, str]) -> None:
         if not items:
             return
+        # ponytail: merge is a dialect-agnostic upsert-by-PK (SELECT then INSERT/UPDATE).
+        # Settings is a tiny low-volume store, so the per-key SELECT is free.
         for key, value in items.items():
-            stmt = insert(AppSetting).values(key=key, value=value)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=[AppSetting.key],
-                set_={"value": stmt.excluded.value},
-            )
-            await self._db.execute(stmt)
+            await self._db.merge(AppSetting(key=key, value=value))
         await self._db.flush()

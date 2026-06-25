@@ -7,8 +7,8 @@ from kodoku.db.engine import get_engine, get_sessionmaker
 
 
 @pytest.mark.asyncio
-async def test_engine_can_connect_to_postgres() -> None:
-    """Requires docker compose up. Confirms the async engine reaches Postgres."""
+async def test_engine_can_connect() -> None:
+    """Confirms the async engine reaches the configured database (SQLite by default)."""
     engine = get_engine()
     async with engine.connect() as conn:
         result = await conn.execute(text("SELECT 1 AS ok"))

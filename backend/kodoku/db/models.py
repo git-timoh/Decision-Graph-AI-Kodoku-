@@ -6,11 +6,12 @@ Schema mirrors section 5 of the design spec. All ids are UUID v4 except
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     DateTime,
     ForeignKey,
@@ -19,19 +20,30 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    Uuid,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from kodoku.db.base import Base
+
+# ponytail: JSONB on Postgres, plain JSON on SQLite (the local default). Payloads are
+# read as whole blobs, never queried inside, so the variant costs nothing.
+JSONType = JSONB().with_variant(JSON(), "sqlite")  # type: ignore[no-untyped-call]
+
+
+def _utcnow() -> datetime:
+    # Python-side default with microsecond precision. SQLite's CURRENT_TIMESTAMP is only
+    # second-resolution, so DB-side func.now() ties rows created in the same second.
+    return datetime.now(UTC)
 
 
 class Session(Base):
     __tablename__ = "sessions"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[str] = mapped_column(
         String, nullable=False, default="local", server_default="local"
@@ -40,7 +52,7 @@ class Session(Base):
     goal: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False)
     config: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict, server_default="{}"
+        JSONType, nullable=False, default=dict, server_default="{}"
     )
     cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(12, 6), nullable=False, default=0, server_default="0"
@@ -48,13 +60,14 @@ class Session(Base):
     current_step: Mapped[str | None] = mapped_column(String, nullable=True)
     final_synthesis: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
+        default=_utcnow,
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=_utcnow,
     )
 
     nodes: Mapped[list[Node]] = relationship(
@@ -78,15 +91,15 @@ class Node(Base):
     __tablename__ = "nodes"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(), primary_key=True, default=uuid.uuid4
     )
     session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(),
         ForeignKey("sessions.id", ondelete="CASCADE"),
         nullable=False,
     )
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(),
         ForeignKey("nodes.id", ondelete="CASCADE"),
         nullable=True,
     )
@@ -116,16 +129,16 @@ class Evaluation(Base):
     __tablename__ = "evaluations"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(), primary_key=True, default=uuid.uuid4
     )
     node_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(),
         ForeignKey("nodes.id", ondelete="CASCADE"),
         nullable=False,
     )
     score: Mapped[Decimal] = mapped_column(Numeric(4, 2), nullable=False)
     critique: Mapped[str] = mapped_column(Text, nullable=False)
-    dimensions: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    dimensions: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)
     model: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -140,16 +153,16 @@ class Checkpoint(Base):
     __tablename__ = "checkpoints"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(), primary_key=True, default=uuid.uuid4
     )
     session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(),
         ForeignKey("sessions.id", ondelete="CASCADE"),
         nullable=False,
     )
     kind: Mapped[str] = mapped_column(String, nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    decision: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)
+    decision: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -167,14 +180,17 @@ class Checkpoint(Base):
 class Event(Base):
     __tablename__ = "events"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # ponytail: SQLite only auto-fills a rowid alias for literal INTEGER, not BIGINT.
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True
+    )
     session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(),
         ForeignKey("sessions.id", ondelete="CASCADE"),
         nullable=False,
     )
     type: Mapped[str] = mapped_column(String, nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

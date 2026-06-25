@@ -17,7 +17,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = "postgresql+asyncpg://kodoku:kodoku@localhost:5432/kodoku"
+    # Local-first default: a SQLite file in the working dir. Override DATABASE_URL with a
+    # postgresql+asyncpg:// URL to run against Postgres (hosted/multi-user).
+    database_url: str = "sqlite+aiosqlite:///./kodoku.db"
     app_env: str = "development"
     log_level: str = "INFO"
     # NoDecode prevents pydantic-settings from JSON-parsing the raw env string before
