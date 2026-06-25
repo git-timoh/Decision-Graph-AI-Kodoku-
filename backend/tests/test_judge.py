@@ -71,6 +71,20 @@ async def test_falls_back_when_keep_empty() -> None:
     assert out.decision.keep == [cands[0].id]  # best-of by threshold floor
 
 
+async def test_falls_back_when_id_in_both_keep_and_prune() -> None:
+    cands = _cands()
+    # B appears in both buckets — a contradictory cover. Must fall back, not
+    # silently keep B by virtue of it being in `keep`.
+    llm = FakeLLMClient(completions=[
+        json.dumps({"keep": [str(cands[0].id), str(cands[1].id)],
+                    "prune": [str(cands[1].id)], "rationale": "contradiction"}),
+    ])
+    out = await decide_with_judge(llm, goal="g", candidates=cands, depth=1, max_depth=2)
+    assert out.source == "threshold_fallback"
+    assert out.decision.keep == [cands[0].id]
+    assert out.decision.prune == [cands[1].id]
+
+
 async def test_falls_back_on_malformed_json() -> None:
     cands = _cands()
     # parse_json retries (retries+1 = 3 calls) then raises StepError -> fallback.

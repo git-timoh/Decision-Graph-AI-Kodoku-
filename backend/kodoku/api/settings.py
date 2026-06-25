@@ -42,6 +42,10 @@ def get_role_clients_builder() -> RoleClientsBuilder:
 
 _HINT_LEN = 4
 
+#: Cap on the provider error string echoed to the UI. The message is third-party
+#: (litellm masks keys, but it's not ours), so bound it defensively.
+_MAX_ERROR_LEN = 500
+
 
 def _provider_key(name: str) -> str:
     return f"key.{name}"
@@ -124,6 +128,6 @@ async def test_settings(
     try:
         clients = await build_clients(db)
         await clients.evaluate.complete(system="ping", prompt="Reply with OK")
-    except Exception as exc:  # noqa: BLE001 — surface any provider error verbatim
-        return SettingsTestResponse(ok=False, error=str(exc))
+    except Exception as exc:  # noqa: BLE001 — surface any provider error, bounded
+        return SettingsTestResponse(ok=False, error=str(exc)[:_MAX_ERROR_LEN])
     return SettingsTestResponse(ok=True, error=None)

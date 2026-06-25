@@ -80,8 +80,13 @@ async def judge_decide(
     keep = [cid for cid in result.keep if cid in candidate_ids]
     keep_set = set(keep)
     submitted = set(result.keep) | set(result.prune)
-    if submitted != candidate_ids or not keep:
-        raise ValueError("judge result is not an exact, non-empty cover of candidates")
+    # An id in BOTH keep and prune is contradictory: the prompt asks for exactly
+    # one bucket each. Reject (→ threshold fallback) rather than silently keeping it.
+    overlap = set(result.keep) & set(result.prune)
+    if submitted != candidate_ids or overlap or not keep:
+        raise ValueError(
+            "judge result is not an exact, disjoint, non-empty cover of candidates"
+        )
 
     # Preserve input order; derive prune from the cover so it always matches.
     keep_ordered = [c.id for c in candidates if c.id in keep_set]

@@ -14,8 +14,8 @@ from kodoku.api.health import router as health_router
 from kodoku.api.run import router as run_router
 from kodoku.api.sessions import router as sessions_router
 from kodoku.api.settings import router as settings_router
-from kodoku.db.bootstrap import ensure_schema
-from kodoku.db.engine import get_engine
+from kodoku.db.bootstrap import ensure_schema, fail_orphaned_runs
+from kodoku.db.engine import get_engine, get_sessionmaker
 from kodoku.settings import Settings, get_settings
 from kodoku.web import mount_web
 from kodoku.ws.router import router as ws_router
@@ -24,6 +24,8 @@ from kodoku.ws.router import router as ws_router
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_schema(get_engine())
+    async with get_sessionmaker()() as session:
+        await fail_orphaned_runs(session)
     yield
 
 

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from kodoku.db.bootstrap import ensure_schema
+from kodoku.db.bootstrap import ensure_schema, fail_orphaned_runs
+from kodoku.db.models import Session as SessionModel
+from kodoku.domain.enums import SessionStatus
 
 
 async def test_ensure_schema_creates_tables_on_sqlite() -> None:
@@ -22,4 +24,30 @@ async def test_ensure_schema_skips_non_sqlite() -> None:
     # build an engine object without connecting; postgres dialect must be skipped
     engine = create_async_engine("postgresql+asyncpg://u:p@localhost/db")
     assert await ensure_schema(engine) is False
+    await engine.dispose()
+
+
+async def test_fail_orphaned_runs_only_touches_running() -> None:
+    engine = create_async_engine("sqlite+aiosqlite://")
+    await ensure_schema(engine)
+    sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with sessionmaker() as s:
+        running = SessionModel(
+            title="r", goal="g" * 10, status=SessionStatus.RUNNING.value,
+            current_step="expanding",
+        )
+        done = SessionModel(title="d", goal="g" * 10, status=SessionStatus.DONE.value)
+        s.add_all([running, done])
+        await s.commit()
+        running_id, done_id = running.id, done.id
+
+    async with sessionmaker() as s:
+        changed = await fail_orphaned_runs(s)
+    assert changed == 1
+
+    async with sessionmaker() as s:
+        assert (await s.get(SessionModel, running_id)).status == SessionStatus.ERROR.value
+        assert (await s.get(SessionModel, running_id)).current_step is None
+        assert (await s.get(SessionModel, done_id)).status == SessionStatus.DONE.value
     await engine.dispose()
