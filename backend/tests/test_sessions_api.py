@@ -143,3 +143,52 @@ async def test_get_unknown_id_returns_404(client: AsyncClient) -> None:
 async def test_invalid_goal_returns_422(client: AsyncClient) -> None:
     response = await client.post("/sessions", json={"goal": "short"})
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_export_md_is_downloadable_markdown(client: AsyncClient) -> None:
+    created = (await client.post(
+        "/sessions",
+        json={"goal": "Plan an export of the decision memo."},
+    )).json()
+
+    resp = await client.get(f"/sessions/{created['session_id']}/export")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/markdown")
+    assert "attachment; filename=" in resp.headers["content-disposition"]
+    assert ".md" in resp.headers["content-disposition"]
+    assert "## Recommendation" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_export_json_returns_bundle_shape(client: AsyncClient) -> None:
+    created = (await client.post(
+        "/sessions",
+        json={"goal": "Plan an export of the decision memo as json."},
+    )).json()
+
+    resp = await client.get(f"/sessions/{created['session_id']}/export?format=json")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/json")
+    body = resp.json()
+    assert body["id"] == created["session_id"]
+    assert body["nodes"][0]["kind"] == "root"
+
+
+@pytest.mark.asyncio
+async def test_export_unknown_id_returns_404(client: AsyncClient) -> None:
+    import uuid
+
+    resp = await client.get(f"/sessions/{uuid.uuid4()}/export")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_export_bad_format_returns_422(client: AsyncClient) -> None:
+    created = (await client.post(
+        "/sessions",
+        json={"goal": "Plan an export with a bad format value."},
+    )).json()
+
+    resp = await client.get(f"/sessions/{created['session_id']}/export?format=pdf")
+    assert resp.status_code == 422

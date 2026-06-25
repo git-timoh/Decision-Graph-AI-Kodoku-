@@ -1,6 +1,7 @@
 """REST API for sessions."""
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -15,6 +16,7 @@ from kodoku.api.dtos import (
     SessionUpdate,
 )
 from kodoku.db.session import get_db
+from kodoku.export.memo import _slug, render_markdown
 from kodoku.repo.sessions import (
     SessionMutationNotAllowed,
     SessionNotFound,
@@ -65,6 +67,43 @@ async def get_session(
         "evaluations": bundle.evaluations,
         "checkpoints": bundle.checkpoints,
     })
+
+
+@router.get("/{session_id}/export")
+async def export_session(
+    session_id: UUID,
+    format: Literal["md", "json"] = "md",
+    repo: SessionRepository = Depends(_repo),  # noqa: B008
+) -> Response:
+    try:
+        bundle = await repo.get_bundle(session_id)
+    except SessionNotFound as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+
+    slug = _slug(bundle.session.title)
+    short = str(session_id)[:8]
+    if format == "json":
+        detail = SessionDetailResponse.model_validate({
+            **SessionResponse.model_validate(bundle.session).model_dump(),
+            "nodes": bundle.nodes,
+            "evaluations": bundle.evaluations,
+            "checkpoints": bundle.checkpoints,
+        })
+        content = detail.model_dump_json()
+        media_type = "application/json"
+        ext = "json"
+    else:
+        content = render_markdown(bundle)
+        media_type = "text/markdown"
+        ext = "md"
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="kodoku-{slug}-{short}.{ext}"',
+        },
+    )
 
 
 @router.patch("/{session_id}", response_model=SessionResponse)
