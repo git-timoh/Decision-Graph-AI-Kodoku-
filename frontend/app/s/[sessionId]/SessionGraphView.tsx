@@ -8,6 +8,7 @@ import { NodeDrawer } from "@/components/panels/NodeDrawer";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 import { connectSession } from "@/lib/ws/client";
+import { ReplayBar } from "@/app/s/[sessionId]/ReplayBar";
 import type { EngineStatus, GraphNode } from "@/lib/ws/types";
 import type { EvaluationDTO, NodeDTO } from "@/lib/types/api";
 import { useSessionStore } from "@/state/sessionStore";
@@ -73,6 +74,7 @@ export function SessionGraphView({
     (s) => Object.values(s.graph.nodes).filter((n) => n.status === "kept").length,
   );
   const [emitting, setEmitting] = useState(false);
+  const [replay, setReplay] = useState(false);
   const [running, setRunning] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   const canRun = status === "draft" || status === "paused" || status === "error";
@@ -83,6 +85,7 @@ export function SessionGraphView({
       status: initialStatus,
       synthesis: initialSynthesis ?? "",
     });
+    if (replay) return; // replay mode: ReplayBar drives the store, no live socket
     const disconnect = connectSession(sessionId, {
       apply: applyEvent,
       getSince: () => useSessionStore.getState().graph.lastSeenEventId,
@@ -98,6 +101,7 @@ export function SessionGraphView({
     seedGraph,
     applyEvent,
     setConnected,
+    replay,
   ]);
 
   async function emitDebug() {
@@ -140,12 +144,19 @@ export function SessionGraphView({
           {status}
         </span>
         <span className="text-xs text-muted-foreground">
-          {connected ? "● live" : "○ disconnected"}
+          {replay ? "↺ replay" : connected ? "● live" : "○ disconnected"}
         </span>
         <span className="text-xs text-muted-foreground tabular-nums">
           ${costUsd.toFixed(4)}
         </span>
         <div className="ml-auto flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={replay ? "default" : "outline"}
+            onClick={() => setReplay((r) => !r)}
+          >
+            {replay ? "Exit replay" : "Replay"}
+          </Button>
           <Button asChild size="sm" variant="outline">
             <a href={`${API_BASE}/sessions/${sessionId}/export?format=md`} download>
               Export
@@ -178,6 +189,8 @@ export function SessionGraphView({
           </Button>
         </div>
       </div>
+
+      {replay && <ReplayBar sessionId={sessionId} />}
 
       {showResumeBanner && (
         <div className="flex items-center gap-3 border-b border-border bg-amber-500/10 px-6 py-2.5">
