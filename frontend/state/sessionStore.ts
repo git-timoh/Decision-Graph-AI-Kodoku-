@@ -24,6 +24,7 @@ type SessionStore = {
     initial?: { status?: EngineStatus; synthesis?: string },
   ) => void;
   applyEvent: (event: WsEvent) => void;
+  setGraph: (graph: GraphState) => void;
   setConnected: (connected: boolean) => void;
 
   /** Node currently shown in the NodeDrawer, if any. */
@@ -48,6 +49,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       },
     })),
   applyEvent: (event) => set((state) => ({ graph: reduce(state.graph, event) })),
+  setGraph: (graph) => set({ graph }),
   setConnected: (connected) => set({ connected }),
 
   selectedNodeId: null,
