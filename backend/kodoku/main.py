@@ -17,6 +17,7 @@ from kodoku.api.settings import router as settings_router
 from kodoku.db.bootstrap import ensure_schema
 from kodoku.db.engine import get_engine
 from kodoku.settings import Settings, get_settings
+from kodoku.web import mount_web
 from kodoku.ws.router import router as ws_router
 
 
@@ -55,6 +56,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(run_router)
     app.include_router(settings_router)
     app.include_router(ws_router)
+
+    mount_web(app)
 
     return app
 
