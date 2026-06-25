@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from uuid import UUID
 
 import pytest
 import pytest_asyncio
@@ -107,7 +108,8 @@ async def test_patch_rejects_when_running(client: AsyncClient, db_engine: AsyncE
     async with db_engine.begin() as conn:
         await conn.execute(
             text("UPDATE sessions SET status='running' WHERE id = :id"),
-            {"id": created["session_id"]},
+            # .hex matches how Uuid is stored on SQLite (dashless); Postgres accepts it too.
+            {"id": UUID(created["session_id"]).hex},
         )
 
     response = await client.patch(

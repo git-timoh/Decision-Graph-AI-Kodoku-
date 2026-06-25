@@ -124,7 +124,8 @@ async def test_run_on_running_session_returns_409(
     async with db_engine.begin() as conn:
         await conn.execute(
             text("UPDATE sessions SET status='running' WHERE id = :id"),
-            {"id": sid},
+            # .hex matches how Uuid is stored on SQLite (dashless); Postgres accepts it too.
+            {"id": UUID(sid).hex},
         )
 
     response = await client.post(f"/sessions/{sid}/run")

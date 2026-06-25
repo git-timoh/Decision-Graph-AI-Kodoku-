@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+import tempfile
 from collections.abc import AsyncIterator, Iterator
-from urllib.parse import urlparse, urlunparse
+from pathlib import Path
 
-import asyncpg
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
@@ -19,26 +19,14 @@ from sqlalchemy.ext.asyncio import (
 
 from kodoku.db import models  # noqa: F401  — register mappers
 from kodoku.db.base import Base
+from kodoku.db.engine import enable_sqlite_fk
 
-TEST_DB_NAME = "kodoku_test"
-
-
-def _admin_dsn() -> str:
-    raw = os.environ.get(
-        "DATABASE_URL",
-        "postgresql+asyncpg://kodoku:kodoku@localhost:5432/kodoku",
-    )
-    parsed = urlparse(raw.replace("+asyncpg", ""))
-    return urlunparse(parsed._replace(path="/postgres"))
+# A single temp file shared across the session so multiple engines see the same schema.
+_DB_FILE = Path(tempfile.gettempdir()) / "kodoku_test.db"
 
 
 def _test_db_url() -> str:
-    raw = os.environ.get(
-        "DATABASE_URL",
-        "postgresql+asyncpg://kodoku:kodoku@localhost:5432/kodoku",
-    )
-    parsed = urlparse(raw)
-    return urlunparse(parsed._replace(path=f"/{TEST_DB_NAME}"))
+    return f"sqlite+aiosqlite:///{_DB_FILE.as_posix()}"
 
 
 @pytest.fixture(autouse=True)
@@ -65,27 +53,22 @@ def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
 
 @pytest_asyncio.fixture(scope="session")
 async def _bootstrap_test_db() -> AsyncIterator[None]:
-    """Create the test database (if absent) and create all tables once."""
-    admin = await asyncpg.connect(dsn=_admin_dsn())
-    try:
-        exists = await admin.fetchval(
-            "SELECT 1 FROM pg_database WHERE datname = $1", TEST_DB_NAME
-        )
-        if not exists:
-            await admin.execute(f'CREATE DATABASE "{TEST_DB_NAME}"')
-    finally:
-        await admin.close()
+    """Create a fresh SQLite test database with all tables once."""
+    if _DB_FILE.exists():
+        _DB_FILE.unlink()
 
-    engine = create_async_engine(_test_db_url(), future=True)
+    engine = enable_sqlite_fk(create_async_engine(_test_db_url(), future=True))
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await engine.dispose()
     yield
+    if _DB_FILE.exists():
+        _DB_FILE.unlink()
 
 
 @pytest_asyncio.fixture
 async def db_engine(_bootstrap_test_db: None) -> AsyncIterator[AsyncEngine]:
-    engine = create_async_engine(_test_db_url(), future=True)
+    engine = enable_sqlite_fk(create_async_engine(_test_db_url(), future=True))
     yield engine
     await engine.dispose()
 
@@ -110,9 +93,5 @@ async def truncate_all(db_engine: AsyncEngine) -> AsyncIterator[None]:
     """Available for tests that bypass the per-test transaction (e.g. HTTP tests)."""
     yield
     async with db_engine.begin() as conn:
-        await conn.execute(
-            text(
-                "TRUNCATE TABLE events, checkpoints, evaluations, nodes, sessions, "
-                "app_settings RESTART IDENTITY CASCADE"
-            )
-        )
+        for table in ("events", "checkpoints", "evaluations", "nodes", "sessions", "app_settings"):
+            await conn.execute(text(f"DELETE FROM {table}"))
