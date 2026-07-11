@@ -26,6 +26,19 @@ export class ApiError extends Error {
   }
 }
 
+/** Human-readable one-liner for any error, preferring the API's `detail`. */
+export function describeError(err: unknown): string {
+  if (err instanceof ApiError) {
+    const detail =
+      typeof err.body === "object" && err.body !== null && "detail" in err.body
+        ? String((err.body as { detail: unknown }).detail)
+        : err.message;
+    return `${err.status} ${detail}`;
+  }
+  if (err instanceof Error) return err.message;
+  return "unknown error";
+}
+
 type RequestOptions = RequestInit & { expectEmpty?: boolean };
 
 async function request<T>(path: string, init?: RequestOptions): Promise<T> {

@@ -121,6 +121,62 @@ async def test_make_role_clients_unset_role_model_uses_default(
     assert clients.synthesize.model == DEFAULT_MODELS["synthesize"]
 
 
+@pytest.mark.asyncio
+async def test_session_model_overrides_expand_role_only(db_session: AsyncSession) -> None:
+    """The session's model/temperature override expand; evaluate/synthesize
+    stay on the Settings role models (fair scoring across sessions)."""
+    repo = SettingsRepository(db_session)
+    await repo.upsert(
+        {
+            "model.expand": "anthropic/claude-sonnet-4-6",
+            "model.evaluate": "deepseek/deepseek-chat",
+            "key.openai": "sk-openai-stored",
+        }
+    )
+
+    clients = await make_role_clients(
+        repo, expand_model="openai/gpt-4o-mini", expand_temperature=1.2
+    )
+
+    assert isinstance(clients.expand, LiteLLMClient)
+    assert clients.expand.model == "openai/gpt-4o-mini"
+    assert clients.expand.api_key == "sk-openai-stored"
+    assert clients.expand.temperature == 1.2
+    assert isinstance(clients.evaluate, LiteLLMClient)
+    assert clients.evaluate.model == "deepseek/deepseek-chat"
+
+
+@pytest.mark.asyncio
+async def test_no_session_model_uses_settings_expand_with_session_temperature(
+    db_session: AsyncSession,
+) -> None:
+    repo = SettingsRepository(db_session)
+    await repo.upsert({"model.expand": "deepseek/deepseek-chat"})
+
+    clients = await make_role_clients(repo, expand_model=None, expand_temperature=1.1)
+
+    assert isinstance(clients.expand, LiteLLMClient)
+    assert clients.expand.model == "deepseek/deepseek-chat"
+    assert clients.expand.temperature == 1.1
+
+
+@pytest.mark.asyncio
+async def test_default_role_clients_wires_session_config(db_session: AsyncSession) -> None:
+    """The run router's production builder passes the session's model and
+    temperature through to the expand client."""
+    from kodoku.api.dtos import SessionConfig
+    from kodoku.api.run import _default_role_clients
+
+    await SettingsRepository(db_session).upsert({"key.openai": "sk-openai-stored"})
+    cfg = SessionConfig(model="openai/gpt-4o-mini", temperature=1.3)
+
+    clients = await _default_role_clients(db_session, cfg)
+
+    assert isinstance(clients.expand, LiteLLMClient)
+    assert clients.expand.model == "openai/gpt-4o-mini"
+    assert clients.expand.temperature == 1.3
+
+
 @pytest.mark.parametrize(
     ("model", "expected_provider"),
     [

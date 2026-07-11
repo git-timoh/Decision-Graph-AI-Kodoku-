@@ -8,7 +8,7 @@ from string import Template
 from kodoku.llm.base import LLMClient
 
 _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "synthesize.md"
-_SYSTEM = "You are a rigorous strategic planning assistant that replies in plain prose."
+_SYSTEM = "You are a rigorous strategic planning assistant that replies in clean Markdown."
 
 
 def synthesize(

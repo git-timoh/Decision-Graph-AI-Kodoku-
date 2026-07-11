@@ -20,7 +20,7 @@ from kodoku.api.dtos import (
 
 def test_session_config_defaults() -> None:
     cfg = SessionConfig()
-    assert cfg.model == "anthropic/claude-sonnet-4-6"
+    assert cfg.model is None  # None = use the Settings expand-role model
     assert cfg.branching_factor == 3
     assert cfg.max_depth == 3
     assert cfg.temperature == 0.7
@@ -29,6 +29,14 @@ def test_session_config_defaults() -> None:
 def test_session_config_rejects_bad_model_string() -> None:
     with pytest.raises(ValidationError):
         SessionConfig(model="not a valid model string")
+
+
+def test_session_config_rejects_slashless_model() -> None:
+    """A slash-less model (e.g. 'gpt-4o') would resolve keyless at /run."""
+    with pytest.raises(ValidationError):
+        SessionConfig(model="gpt-4o")
+    with pytest.raises(ValidationError):
+        SessionConfig(branch_models=["gpt-4o"])
 
 
 def test_session_config_branching_factor_bounds() -> None:

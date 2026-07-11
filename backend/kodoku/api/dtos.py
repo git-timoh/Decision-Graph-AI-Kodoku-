@@ -22,7 +22,9 @@ _MODEL_RE = re.compile(r"^[a-z0-9][a-z0-9._\-:/]*$")
 class SessionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    model: str = "anthropic/claude-sonnet-4-6"
+    #: Expand-role model for this session; None = the Settings expand model.
+    #: Evaluate/synthesize always use the Settings role models (fair scoring).
+    model: str | None = None
     branching_factor: int = Field(default=3, ge=1, le=10)
     max_depth: int = Field(default=3, ge=1, le=10)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
@@ -33,10 +35,15 @@ class SessionConfig(BaseModel):
 
     @field_validator("model")
     @classmethod
-    def _validate_model(cls, value: str) -> str:
-        if " " in value or not _MODEL_RE.match(value):
+    def _validate_model(cls, value: str | None) -> str | None:
+        # Require a provider prefix: a slash-less string (e.g. "gpt-4o") would
+        # resolve keyless in the BYOK factory and only fail at /run.
+        if value is None:
+            return value
+        if " " in value or "/" not in value or not _MODEL_RE.match(value):
             raise ValueError(
-                "model must be a LiteLLM-style identifier (e.g. 'anthropic/claude-sonnet-4-6')"
+                "model must be a LiteLLM-style 'provider/model' identifier "
+                "(e.g. 'anthropic/claude-sonnet-4-6')"
             )
         return value
 
@@ -49,9 +56,10 @@ class SessionConfig(BaseModel):
         for entry in self.branch_models:
             if entry == "":
                 continue
-            if " " in entry or not _MODEL_RE.match(entry):
+            if " " in entry or "/" not in entry or not _MODEL_RE.match(entry):
                 raise ValueError(
-                    f"branch_models entry {entry!r} must be a LiteLLM-style identifier or ''"
+                    f"branch_models entry {entry!r} must be a LiteLLM-style "
+                    "'provider/model' identifier or ''"
                 )
         return self
 
@@ -173,11 +181,6 @@ class WsEvent(BaseModel):
     session_id: UUID
     ts: datetime
     payload: dict[str, Any]
-
-
-class DebugEmitResponse(BaseModel):
-    emitted: int
-    last_event_id: int
 
 
 PROVIDER_NAMES: tuple[str, ...] = (

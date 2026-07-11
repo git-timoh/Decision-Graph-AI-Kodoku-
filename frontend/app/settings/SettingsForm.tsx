@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ApiError, api } from "@/lib/api/client";
+import { api, describeError } from "@/lib/api/client";
+import { MODEL_PRESETS } from "@/lib/models";
 import type { SettingsResponse, SettingsUpdate } from "@/lib/types/api";
 
 const PROVIDERS = [
@@ -35,17 +36,6 @@ const ROLE_LABELS: Record<ModelRole, string> = {
   synthesize: "Synthesize",
 };
 
-// Mirrors the preset list in NewSessionDialog.tsx, kept in sync by hand since
-// the backend doesn't expose a canonical preset list.
-const MODEL_PRESETS = [
-  { value: "anthropic/claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-  { value: "openai/gpt-4o-mini", label: "OpenAI GPT-4o mini" },
-  { value: "deepseek/deepseek-chat", label: "DeepSeek Chat" },
-  { value: "openrouter/deepseek/deepseek-chat", label: "OpenRouter: DeepSeek Chat" },
-  { value: "openrouter/zhipu/glm-4", label: "OpenRouter: Zhipu GLM-4" },
-  { value: "openrouter/anthropic/claude-3.5-sonnet", label: "OpenRouter: Claude 3.5 Sonnet" },
-  { value: "ollama/llama3.1", label: "Ollama (local dev)" },
-];
 
 const CUSTOM_VALUE = "__custom__";
 
@@ -372,16 +362,4 @@ export function SettingsForm() {
       </div>
     </div>
   );
-}
-
-function describeError(err: unknown): string {
-  if (err instanceof ApiError) {
-    const detail =
-      typeof err.body === "object" && err.body !== null && "detail" in err.body
-        ? String((err.body as { detail: unknown }).detail)
-        : err.message;
-    return `${err.status} ${detail}`;
-  }
-  if (err instanceof Error) return err.message;
-  return "unknown error";
 }

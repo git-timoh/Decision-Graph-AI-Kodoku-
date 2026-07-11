@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 
 import { Graph } from "@/components/graph/Graph";
 import { CheckpointPanel } from "@/components/panels/CheckpointPanel";
 import { NodeDrawer } from "@/components/panels/NodeDrawer";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api/client";
+import { api, describeError } from "@/lib/api/client";
 import { connectSession } from "@/lib/ws/client";
 import { ReplayBar } from "@/app/s/[sessionId]/ReplayBar";
 import type { EngineStatus, GraphNode } from "@/lib/ws/types";
@@ -73,10 +76,10 @@ export function SessionGraphView({
   const keptCount = useSessionStore(
     (s) => Object.values(s.graph.nodes).filter((n) => n.status === "kept").length,
   );
-  const [emitting, setEmitting] = useState(false);
   const [replay, setReplay] = useState(false);
   const [running, setRunning] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const canRun = status === "draft" || status === "paused" || status === "error";
   const showResumeBanner = status === "paused" || status === "error";
 
@@ -104,21 +107,13 @@ export function SessionGraphView({
     replay,
   ]);
 
-  async function emitDebug() {
-    setEmitting(true);
-    try {
-      await fetch(`${API_BASE}/sessions/${sessionId}/debug/emit`, {
-        method: "POST",
-      });
-    } finally {
-      setEmitting(false);
-    }
-  }
-
   async function runSession() {
     setRunning(true);
+    setActionError(null);
     try {
       await api.runSession(sessionId);
+    } catch (err) {
+      setActionError(describeError(err));
     } finally {
       setRunning(false);
     }
@@ -126,8 +121,11 @@ export function SessionGraphView({
 
   async function interruptSession() {
     setInterrupting(true);
+    setActionError(null);
     try {
       await api.interruptSession(sessionId);
+    } catch (err) {
+      setActionError(describeError(err));
     } finally {
       setInterrupting(false);
     }
@@ -167,9 +165,6 @@ export function SessionGraphView({
               json
             </a>
           </Button>
-          <Button size="sm" variant="outline" onClick={emitDebug} disabled={emitting}>
-            {emitting ? "Emitting…" : "Emit debug events"}
-          </Button>
           {status === "running" && (
             <Button
               size="sm"
@@ -191,6 +186,12 @@ export function SessionGraphView({
       </div>
 
       {replay && <ReplayBar sessionId={sessionId} />}
+
+      {actionError && (
+        <div className="border-b border-border bg-red-500/10 px-6 py-2 text-xs text-red-600">
+          {actionError}
+        </div>
+      )}
 
       {showResumeBanner && (
         <div className="flex items-center gap-3 border-b border-border bg-amber-500/10 px-6 py-2.5">
@@ -231,7 +232,19 @@ export function SessionGraphView({
           <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Synthesis
           </h2>
-          <p className="mt-1 whitespace-pre-wrap text-sm">{synthesis}</p>
+          {status === "running" ? (
+            // Streaming: plain text — re-parsing the growing string as
+            // markdown on every delta is O(n²) main-thread work.
+            <p className="mt-1 whitespace-pre-wrap text-sm">{synthesis}</p>
+          ) : (
+            // remark-breaks keeps single-newline line breaks from models
+            // that reply in plain prose despite the markdown instruction.
+            <div className="prose prose-sm mt-1 max-w-none dark:prose-invert">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                {synthesis}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
       )}
     </div>

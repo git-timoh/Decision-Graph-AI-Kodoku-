@@ -7,5 +7,6 @@ Kept ideas:
 $kept_ideas
 
 Write the single strongest final recommendation grounded in these kept ideas.
-Respond in prose (not JSON, not a list) that synthesizes the kept ideas into
-one coherent, actionable recommendation.
+Respond in Markdown prose (short headings and bullet points are welcome; no
+JSON) that synthesizes the kept ideas into one coherent, actionable
+recommendation.

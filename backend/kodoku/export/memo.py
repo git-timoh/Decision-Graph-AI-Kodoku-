@@ -39,7 +39,7 @@ def render_markdown(bundle: SessionBundle) -> str:
         f"- **Created:** {_fmt_dt(s.created_at)}",
         f"- **Updated:** {_fmt_dt(s.updated_at)}",
         f"- **Total cost:** ${float(s.cost_usd or 0):.4f}",
-        f"- **Model:** {cfg.get('model', '—')}",
+        f"- **Model:** {cfg.get('model') or 'settings default'}",
         f"- **Branching factor:** {cfg.get('branching_factor', '—')}",
         f"- **Max depth:** {cfg.get('max_depth', '—')}",
         f"- **Decide mode:** {cfg.get('decide_mode', '—')}",

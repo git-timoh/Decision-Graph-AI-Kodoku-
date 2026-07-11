@@ -31,13 +31,18 @@ from kodoku.repo.settings import SettingsRepository
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["run"])
 
-#: Builds the per-role LLM clients for a run, given the run's DB session.
+#: Builds the per-role LLM clients for a run, given the run's DB session and
+#: the session's config (whose model/temperature override the expand role).
 #: Overridden in tests to inject a `RoleClients` of fakes.
-RoleClientsBuilder = Callable[[AsyncSession], Awaitable[RoleClients]]
+RoleClientsBuilder = Callable[[AsyncSession, SessionConfig], Awaitable[RoleClients]]
 
 
-async def _default_role_clients(s: AsyncSession) -> RoleClients:
-    return await make_role_clients(SettingsRepository(s))
+async def _default_role_clients(s: AsyncSession, cfg: SessionConfig) -> RoleClients:
+    return await make_role_clients(
+        SettingsRepository(s),
+        expand_model=cfg.model,
+        expand_temperature=cfg.temperature,
+    )
 
 
 def get_role_clients_builder() -> RoleClientsBuilder:
@@ -67,13 +72,15 @@ async def _run_engine(session_id: UUID, build_clients: RoleClientsBuilder) -> No
     """Run the engine on a fresh session; commit once, always, on exit."""
     async with get_sessionmaker()() as s:
         session = await SessionRepository(s).get(session_id)
-        clients = await build_clients(s)
         cfg = SessionConfig(**session.config)
+        clients = await build_clients(s, cfg)
         expand_overrides: dict[str, LLMClient] = {}
         if cfg.branch_models:
             raw = await SettingsRepository(s).get_all()
             expand_overrides = {
-                m: build_client_for_model(m, raw) for m in set(cfg.branch_models) if m
+                m: build_client_for_model(m, raw, temperature=cfg.temperature)
+                for m in set(cfg.branch_models)
+                if m
             }
         engine = DecisionEngine(
             s,

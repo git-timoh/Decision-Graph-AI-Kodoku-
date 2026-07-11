@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
+from kodoku.api.dtos import SessionConfig
 from kodoku.api.run import RoleClientsBuilder, get_role_clients_builder
 from kodoku.db.session import get_db
 from kodoku.engine.runner import runner
@@ -66,7 +67,7 @@ async def client(
                 raise
 
     def _override_role_clients_builder() -> RoleClientsBuilder:
-        async def _build(_s: AsyncSession) -> RoleClients:
+        async def _build(_s: AsyncSession, _cfg: SessionConfig) -> RoleClients:
             fake = _make_fake_client()
             return RoleClients(expand=fake, evaluate=fake, synthesize=fake)
 
@@ -211,7 +212,7 @@ async def hitl_client(
                 raise
 
     def _override_role_clients_builder() -> RoleClientsBuilder:
-        async def _build(_s: AsyncSession) -> RoleClients:
+        async def _build(_s: AsyncSession, _cfg: SessionConfig) -> RoleClients:
             fake = _make_pause_client()
             return RoleClients(expand=fake, evaluate=fake, synthesize=fake)
 

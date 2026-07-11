@@ -110,7 +110,7 @@ class Node(Base):
     status: Mapped[str] = mapped_column(String, nullable=False)
     model: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
     )
 
     session: Mapped[Session] = relationship(back_populates="nodes")
@@ -141,7 +141,7 @@ class Evaluation(Base):
     dimensions: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)
     model: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
     )
 
     node: Mapped[Node] = relationship(back_populates="evaluations")
@@ -167,7 +167,7 @@ class Checkpoint(Base):
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
     )
 
     session: Mapped[Session] = relationship(back_populates="checkpoints")

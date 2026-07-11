@@ -18,6 +18,7 @@ from kodoku.api.dtos import (
 from kodoku.db.session import get_db
 from kodoku.export.memo import _slug, render_markdown
 from kodoku.repo.sessions import (
+    SessionBundle,
     SessionMutationNotAllowed,
     SessionNotFound,
     SessionRepository,
@@ -28,6 +29,16 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 def _repo(db: AsyncSession = Depends(get_db)) -> SessionRepository:  # noqa: B008
     return SessionRepository(db)
+
+
+def _to_detail(bundle: SessionBundle) -> SessionDetailResponse:
+    """Assemble the full session DTO (session + graph) from a repo bundle."""
+    return SessionDetailResponse.model_validate({
+        **SessionResponse.model_validate(bundle.session).model_dump(),
+        "nodes": bundle.nodes,
+        "evaluations": bundle.evaluations,
+        "checkpoints": bundle.checkpoints,
+    })
 
 
 @router.post(
@@ -61,12 +72,7 @@ async def get_session(
     except SessionNotFound as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
 
-    return SessionDetailResponse.model_validate({
-        **SessionResponse.model_validate(bundle.session).model_dump(),
-        "nodes": bundle.nodes,
-        "evaluations": bundle.evaluations,
-        "checkpoints": bundle.checkpoints,
-    })
+    return _to_detail(bundle)
 
 
 @router.get("/{session_id}/export")
@@ -83,13 +89,7 @@ async def export_session(
     slug = _slug(bundle.session.title)
     short = str(session_id)[:8]
     if format == "json":
-        detail = SessionDetailResponse.model_validate({
-            **SessionResponse.model_validate(bundle.session).model_dump(),
-            "nodes": bundle.nodes,
-            "evaluations": bundle.evaluations,
-            "checkpoints": bundle.checkpoints,
-        })
-        content = detail.model_dump_json()
+        content = _to_detail(bundle).model_dump_json()
         media_type = "application/json"
         ext = "json"
     else:

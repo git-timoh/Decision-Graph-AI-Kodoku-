@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import (
 
 from kodoku.db.session import get_db
 from kodoku.main import create_app
+from kodoku.ws.emit import emit_event
 from kodoku.ws.manager import ConnectionManager
 
 
@@ -49,15 +50,28 @@ async def _make_session(client: AsyncClient) -> str:
     return created["session_id"]
 
 
-@pytest.mark.asyncio
-async def test_debug_emit_journals_and_replays_in_order(client: AsyncClient) -> None:
-    sid = await _make_session(client)
+async def _emit_story(db_engine: AsyncEngine, session_id: str) -> None:
+    sessionmaker = async_sessionmaker(bind=db_engine, expire_on_commit=False)
+    async with sessionmaker() as session:
+        sid = UUID(session_id)
+        for type_, payload in [
+            ("session.started", {}),
+            ("node.created", {"id": str(uuid4()), "status": "active"}),
+            ("session.done", {}),
+        ]:
+            await emit_event(session, sid, type_, payload)
+        await session.commit()
 
-    emitted = (await client.post(f"/sessions/{sid}/debug/emit")).json()
-    assert emitted["emitted"] > 0
+
+@pytest.mark.asyncio
+async def test_replay_returns_journaled_events_in_order(
+    client: AsyncClient, db_engine: AsyncEngine
+) -> None:
+    sid = await _make_session(client)
+    await _emit_story(db_engine, sid)
 
     replay = (await client.get(f"/sessions/{sid}/events")).json()
-    assert len(replay) == emitted["emitted"]
+    assert len(replay) == 3
     ids = [e["id"] for e in replay]
     assert ids == sorted(ids)  # monotonic order
     assert replay[0]["type"] == "session.started"
@@ -65,9 +79,11 @@ async def test_debug_emit_journals_and_replays_in_order(client: AsyncClient) -> 
 
 
 @pytest.mark.asyncio
-async def test_replay_since_filters_by_cursor(client: AsyncClient) -> None:
+async def test_replay_since_filters_by_cursor(
+    client: AsyncClient, db_engine: AsyncEngine
+) -> None:
     sid = await _make_session(client)
-    await client.post(f"/sessions/{sid}/debug/emit")
+    await _emit_story(db_engine, sid)
 
     full = (await client.get(f"/sessions/{sid}/events")).json()
     midpoint = full[len(full) // 2]["id"]
