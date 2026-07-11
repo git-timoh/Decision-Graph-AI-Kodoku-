@@ -76,7 +76,9 @@ def _resolve_api_key(provider: str, settings: dict[str, str]) -> str | None:
     return None
 
 
-def build_client_for_model(model: str, settings: dict[str, str]) -> LLMClient:
+def build_client_for_model(
+    model: str, settings: dict[str, str], temperature: float = 0.7
+) -> LLMClient:
     """Build one `LLMClient` for an arbitrary model string, resolving its BYOK key."""
     from kodoku.llm.litellm_client import LiteLLMClient
 
@@ -88,7 +90,9 @@ def build_client_for_model(model: str, settings: dict[str, str]) -> LLMClient:
         api_key = _resolve_api_key(provider, settings)
         api_base = None
 
-    return LiteLLMClient(model=model, api_key=api_key, api_base=api_base)
+    return LiteLLMClient(
+        model=model, temperature=temperature, api_key=api_key, api_base=api_base
+    )
 
 
 def _build_client(role: str, settings: dict[str, str]) -> LLMClient:
@@ -96,11 +100,23 @@ def _build_client(role: str, settings: dict[str, str]) -> LLMClient:
     return build_client_for_model(model, settings)
 
 
-async def make_role_clients(settings: SettingsRepository) -> RoleClients:
-    """Build the per-role `LLMClient`s from stored BYOK keys + model choices."""
+async def make_role_clients(
+    settings: SettingsRepository,
+    *,
+    expand_model: str | None = None,
+    expand_temperature: float | None = None,
+) -> RoleClients:
+    """Build the per-role `LLMClient`s from stored BYOK keys + model choices.
+
+    `expand_model`/`expand_temperature` override the expand role for one run
+    (the session's model/temperature); evaluate and synthesize always use the
+    Settings role models so scoring stays consistent across sessions.
+    """
     raw = await settings.get_all()
+    model = expand_model or raw.get("model.expand") or DEFAULT_MODELS["expand"]
+    temperature = 0.7 if expand_temperature is None else expand_temperature
     return RoleClients(
-        expand=_build_client("expand", raw),
+        expand=build_client_for_model(model, raw, temperature=temperature),
         evaluate=_build_client("evaluate", raw),
         synthesize=_build_client("synthesize", raw),
     )

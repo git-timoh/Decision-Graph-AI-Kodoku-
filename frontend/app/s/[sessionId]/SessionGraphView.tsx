@@ -9,7 +9,7 @@ import { Graph } from "@/components/graph/Graph";
 import { CheckpointPanel } from "@/components/panels/CheckpointPanel";
 import { NodeDrawer } from "@/components/panels/NodeDrawer";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api/client";
+import { api, describeError } from "@/lib/api/client";
 import { connectSession } from "@/lib/ws/client";
 import { ReplayBar } from "@/app/s/[sessionId]/ReplayBar";
 import type { EngineStatus, GraphNode } from "@/lib/ws/types";
@@ -79,6 +79,7 @@ export function SessionGraphView({
   const [replay, setReplay] = useState(false);
   const [running, setRunning] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const canRun = status === "draft" || status === "paused" || status === "error";
   const showResumeBanner = status === "paused" || status === "error";
 
@@ -108,8 +109,11 @@ export function SessionGraphView({
 
   async function runSession() {
     setRunning(true);
+    setActionError(null);
     try {
       await api.runSession(sessionId);
+    } catch (err) {
+      setActionError(describeError(err));
     } finally {
       setRunning(false);
     }
@@ -117,8 +121,11 @@ export function SessionGraphView({
 
   async function interruptSession() {
     setInterrupting(true);
+    setActionError(null);
     try {
       await api.interruptSession(sessionId);
+    } catch (err) {
+      setActionError(describeError(err));
     } finally {
       setInterrupting(false);
     }
@@ -179,6 +186,12 @@ export function SessionGraphView({
       </div>
 
       {replay && <ReplayBar sessionId={sessionId} />}
+
+      {actionError && (
+        <div className="border-b border-border bg-red-500/10 px-6 py-2 text-xs text-red-600">
+          {actionError}
+        </div>
+      )}
 
       {showResumeBanner && (
         <div className="flex items-center gap-3 border-b border-border bg-amber-500/10 px-6 py-2.5">

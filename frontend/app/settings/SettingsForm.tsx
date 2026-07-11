@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ApiError, api } from "@/lib/api/client";
+import { api, describeError } from "@/lib/api/client";
 import { MODEL_PRESETS } from "@/lib/models";
 import type { SettingsResponse, SettingsUpdate } from "@/lib/types/api";
 
@@ -362,16 +362,4 @@ export function SettingsForm() {
       </div>
     </div>
   );
-}
-
-function describeError(err: unknown): string {
-  if (err instanceof ApiError) {
-    const detail =
-      typeof err.body === "object" && err.body !== null && "detail" in err.body
-        ? String((err.body as { detail: unknown }).detail)
-        : err.message;
-    return `${err.status} ${detail}`;
-  }
-  if (err instanceof Error) return err.message;
-  return "unknown error";
 }

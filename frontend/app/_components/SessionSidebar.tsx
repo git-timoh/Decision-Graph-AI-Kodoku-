@@ -1,9 +1,11 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { ApiError, api } from "@/lib/api/client";
+import { api, describeError } from "@/lib/api/client";
 import { useSessionStore } from "@/state/sessionStore";
 import type { SessionListItem } from "@/lib/types/api";
 import { cn } from "@/lib/utils";
@@ -13,9 +15,11 @@ type Props = {
 };
 
 export function SessionSidebar({ activeSessionId }: Props) {
+  const router = useRouter();
   const [sessions, setSessions] = useState<SessionListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tick = useSessionStore((s) => s.sidebarRefreshTick);
+  const refreshSidebar = useSessionStore((s) => s.refreshSidebar);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,19 +30,23 @@ export function SessionSidebar({ activeSessionId }: Props) {
         if (!cancelled) setSessions(rows);
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
-        const message =
-          err instanceof ApiError
-            ? `${err.status} ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : "unknown error";
-        setError(message);
+        if (!cancelled) setError(describeError(err));
       });
     return () => {
       cancelled = true;
     };
   }, [tick]);
+
+  async function handleDelete(id: string) {
+    if (!window.confirm("Delete this session? This cannot be undone.")) return;
+    try {
+      await api.deleteSession(id);
+      refreshSidebar();
+      if (id === activeSessionId) router.push("/");
+    } catch (err) {
+      window.alert(describeError(err));
+    }
+  }
 
   return (
     <aside className="flex h-screen w-72 shrink-0 flex-col border-r border-border bg-card">
@@ -73,11 +81,11 @@ export function SessionSidebar({ activeSessionId }: Props) {
         ) : (
           <ul className="space-y-0.5">
             {(sessions ?? []).map((row) => (
-              <li key={row.id}>
+              <li key={row.id} className="group relative">
                 <Link
                   href={`/s/${row.id}`}
                   className={cn(
-                    "block rounded-md px-2 py-1.5 text-sm hover:bg-accent",
+                    "block rounded-md px-2 py-1.5 pr-8 text-sm hover:bg-accent",
                     row.id === activeSessionId && "bg-accent font-medium",
                   )}
                 >
@@ -86,6 +94,14 @@ export function SessionSidebar({ activeSessionId }: Props) {
                     {row.status}
                   </span>
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(row.id)}
+                  aria-label={`Delete session ${row.title}`}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-destructive group-hover:opacity-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </li>
             ))}
           </ul>

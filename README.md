@@ -102,9 +102,11 @@ Everything lives in-app under **Settings** and is stored in the local database:
 | Ollama base URL | Enables `ollama/*` models for fully local runs. |
 | Models per role | `expand` / `evaluate` / `synthesize` — pick from the shortlist or type any LiteLLM-style `provider/model` slug. |
 
-Per session (in the New session dialog): goal, optional per-branch expand-model
-overrides, human-review mode, decision mode (threshold vs. LLM judge), and an
-optional USD budget cap.
+Per session (in the New session dialog): goal, expand model (defaults to the
+Settings expand model; scoring and synthesis always use the Settings role
+models), exploration depth (Quick / Standard / Deep), optional per-branch
+expand-model overrides, human-review mode, decision mode (threshold vs. LLM
+judge), and an optional USD budget cap.
 
 The only environment variable most people need is `DATABASE_URL`:
 

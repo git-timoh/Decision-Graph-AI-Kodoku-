@@ -23,12 +23,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api } from "@/lib/api/client";
+import { api, describeError } from "@/lib/api/client";
 import { MODEL_PRESETS } from "@/lib/models";
 import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/state/sessionStore";
 
 const BRANCH_SLOTS = 3;
+
+/** Sentinel for "use the Settings expand model" (Radix Select forbids ""). */
+const SETTINGS_DEFAULT = "__settings_default__";
+
+const DEPTH_OPTIONS = [
+  { value: 2, label: "Quick", description: "Shallow pass — fastest and cheapest." },
+  { value: 3, label: "Standard", description: "Default balance of breadth and cost." },
+  {
+    value: 4,
+    label: "Deep",
+    description: "Explores further — roughly 3× the cost of Standard.",
+  },
+] as const;
 
 type HitlMode = "autopilot" | "every_branch";
 
@@ -67,7 +80,8 @@ export function NewSessionDialog() {
   const [open, setOpen] = useState(false);
   const [goal, setGoal] = useState("");
   const [title, setTitle] = useState("");
-  const [model, setModel] = useState(MODEL_PRESETS[0].value);
+  const [model, setModel] = useState(SETTINGS_DEFAULT);
+  const [maxDepth, setMaxDepth] = useState<number>(3);
   const [branchModels, setBranchModels] = useState<string[]>([]);
   const [hitlMode, setHitlMode] = useState<HitlMode>("autopilot");
   const [decideMode, setDecideMode] = useState<DecideMode>("threshold");
@@ -78,7 +92,8 @@ export function NewSessionDialog() {
   function reset() {
     setGoal("");
     setTitle("");
-    setModel(MODEL_PRESETS[0].value);
+    setModel(SETTINGS_DEFAULT);
+    setMaxDepth(3);
     setBranchModels([]);
     setHitlMode("autopilot");
     setDecideMode("threshold");
@@ -102,10 +117,10 @@ export function NewSessionDialog() {
         goal,
         title: title.trim() ? title.trim() : null,
         config: {
-          model,
+          model: model === SETTINGS_DEFAULT ? null : model,
           branching_factor: 3,
           branch_models: filledBranchModels.some((m) => m !== "") ? filledBranchModels : null,
-          max_depth: 3,
+          max_depth: maxDepth,
           temperature: 0.7,
           hitl_mode: hitlMode,
           decide_mode: decideMode,
@@ -117,13 +132,7 @@ export function NewSessionDialog() {
       reset();
       router.push(`/s/${session_id}`);
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? `${err.status} ${err.message}`
-          : err instanceof Error
-            ? err.message
-            : "unknown error";
-      setError(message);
+      setError(describeError(err));
       setSubmitting(false);
     }
   }
@@ -181,6 +190,9 @@ export function NewSessionDialog() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={SETTINGS_DEFAULT}>
+                  Settings default (recommended)
+                </SelectItem>
                 {MODEL_PRESETS.map((preset) => (
                   <SelectItem key={preset.value} value={preset.value}>
                     {preset.label}
@@ -188,6 +200,35 @@ export function NewSessionDialog() {
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Used to expand ideas. Scoring and synthesis always use the models
+              from Settings.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Exploration</Label>
+            <div className="inline-flex w-full rounded-md border border-input p-0.5">
+              {DEPTH_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setMaxDepth(option.value)}
+                  aria-pressed={maxDepth === option.value}
+                  className={cn(
+                    "flex-1 rounded-[5px] px-2.5 py-1.5 text-sm font-medium transition-colors",
+                    maxDepth === option.value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {DEPTH_OPTIONS.find((option) => option.value === maxDepth)?.description}
+            </p>
           </div>
 
           <div className="space-y-2">

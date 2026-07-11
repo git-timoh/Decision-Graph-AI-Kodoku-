@@ -23,7 +23,7 @@ async def test_create_session_atomically_creates_root_node(db_session: AsyncSess
     assert session.status == SessionStatus.DRAFT.value
     assert session.user_id == "local"
     assert session.title.startswith("Brainstorm side-project")
-    assert session.config["model"] == "anthropic/claude-sonnet-4-6"
+    assert session.config["model"] is None  # None = Settings expand-role model
 
     nodes = await repo.list_nodes(session.id)
     assert len(nodes) == 1
