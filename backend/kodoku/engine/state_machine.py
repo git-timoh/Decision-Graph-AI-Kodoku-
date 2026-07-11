@@ -89,7 +89,9 @@ class DecisionEngine:
                 self.session.status = SessionStatus.ERROR.value
                 self.session.current_step = None
                 await self.db.flush()
-                await self.emit(SESSION_ERROR, {"message": str(exc)})
+                # Bounded like /settings/test: third-party error text, journaled
+                # and broadcast — don't persist unbounded strings.
+                await self.emit(SESSION_ERROR, {"message": str(exc)[:500]})
                 await self.db.flush()
             except Exception:  # noqa: BLE001 — don't mask the original error
                 pass

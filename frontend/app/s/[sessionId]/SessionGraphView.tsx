@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 
 import { Graph } from "@/components/graph/Graph";
 import { CheckpointPanel } from "@/components/panels/CheckpointPanel";
@@ -73,7 +76,6 @@ export function SessionGraphView({
   const keptCount = useSessionStore(
     (s) => Object.values(s.graph.nodes).filter((n) => n.status === "kept").length,
   );
-  const [emitting, setEmitting] = useState(false);
   const [replay, setReplay] = useState(false);
   const [running, setRunning] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
@@ -103,17 +105,6 @@ export function SessionGraphView({
     setConnected,
     replay,
   ]);
-
-  async function emitDebug() {
-    setEmitting(true);
-    try {
-      await fetch(`${API_BASE}/sessions/${sessionId}/debug/emit`, {
-        method: "POST",
-      });
-    } finally {
-      setEmitting(false);
-    }
-  }
 
   async function runSession() {
     setRunning(true);
@@ -166,9 +157,6 @@ export function SessionGraphView({
             <a href={`${API_BASE}/sessions/${sessionId}/export?format=json`} download>
               json
             </a>
-          </Button>
-          <Button size="sm" variant="outline" onClick={emitDebug} disabled={emitting}>
-            {emitting ? "Emitting…" : "Emit debug events"}
           </Button>
           {status === "running" && (
             <Button
@@ -231,7 +219,19 @@ export function SessionGraphView({
           <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Synthesis
           </h2>
-          <p className="mt-1 whitespace-pre-wrap text-sm">{synthesis}</p>
+          {status === "running" ? (
+            // Streaming: plain text — re-parsing the growing string as
+            // markdown on every delta is O(n²) main-thread work.
+            <p className="mt-1 whitespace-pre-wrap text-sm">{synthesis}</p>
+          ) : (
+            // remark-breaks keeps single-newline line breaks from models
+            // that reply in plain prose despite the markdown instruction.
+            <div className="prose prose-sm mt-1 max-w-none dark:prose-invert">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                {synthesis}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
       )}
     </div>
