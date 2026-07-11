@@ -175,11 +175,6 @@ class WsEvent(BaseModel):
     payload: dict[str, Any]
 
 
-class DebugEmitResponse(BaseModel):
-    emitted: int
-    last_event_id: int
-
-
 PROVIDER_NAMES: tuple[str, ...] = (
     "openrouter",
     "deepseek",

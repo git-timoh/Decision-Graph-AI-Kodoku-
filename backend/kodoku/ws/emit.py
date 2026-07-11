@@ -1,8 +1,8 @@
 """Single funnel for emitting an event: journal it, then fan out live.
 
-Used by the M3 debug endpoint and, from M4 on, by the DecisionEngine. The DB
-row is the durable truth (and the `id` cursor); the broadcast `ts` is a
-display timestamp taken Python-side to avoid a refresh round-trip.
+Used by the DecisionEngine and tests. The DB row is the durable truth (and the
+`id` cursor); the broadcast `ts` is a display timestamp taken Python-side to
+avoid a refresh round-trip.
 """
 from __future__ import annotations
 

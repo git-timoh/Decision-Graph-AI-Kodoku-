@@ -78,26 +78,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/sessions/{session_id}/debug/emit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Debug Emit
-         * @description Emit a scripted storyline to drive frontend development.
-         */
-        post: operations["debug_emit_sessions__session_id__debug_emit_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/sessions/{session_id}/run": {
         parameters: {
             query?: never;
@@ -226,13 +206,6 @@ export interface components {
          * @enum {string}
          */
         CheckpointKind: "post_expand" | "post_evaluate" | "pre_synthesis";
-        /** DebugEmitResponse */
-        DebugEmitResponse: {
-            /** Emitted */
-            emitted: number;
-            /** Last Event Id */
-            last_event_id: number;
-        };
         /** EvaluationDTO */
         EvaluationDTO: {
             /**
@@ -786,37 +759,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WsEvent"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    debug_emit_sessions__session_id__debug_emit_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DebugEmitResponse"];
                 };
             };
             /** @description Validation Error */
