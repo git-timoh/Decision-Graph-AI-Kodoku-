@@ -4,7 +4,7 @@
 > visible tree of ideas — branching, scoring, and pruning them with LLMs —
 > then writes up a recommendation. You stay in the loop at every branch.
 
-[![CI](https://github.com/git-timoh/Decision-Graph-AI-Kodoku-/actions/workflows/ci.yml/badge.svg)](https://github.com/git-timoh/Decision-Graph-AI-Kodoku-/actions/workflows/ci.yml)
+[![CI](https://github.com/git-timoh/kodoku-decision-graph/actions/workflows/ci.yml/badge.svg)](https://github.com/git-timoh/kodoku-decision-graph/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 
